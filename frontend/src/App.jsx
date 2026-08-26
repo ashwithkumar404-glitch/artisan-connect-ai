@@ -12,6 +12,7 @@ import Explore from './pages/Explore';
 import About from './pages/About';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import BuyerProfile from './pages/BuyerProfile';
 
 // Artisan Pages
 import ArtisanDashboard from './pages/artisan/Dashboard';
@@ -27,7 +28,22 @@ import VerificationQueue from './pages/admin/VerificationQueue';
 import ArtisansList from './pages/admin/ArtisansList';
 import ProductsModeration from './pages/admin/ProductsModeration';
 
+import { useAuth } from './lib/AuthContext';
+
 export default function App() {
+  const { loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-10 h-10 border-4 border-gov-navy border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm font-semibold text-slate-655">Loading secure session...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>
@@ -38,6 +54,7 @@ export default function App() {
           <Route path="about" element={<About />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
+          <Route path="profile" element={<BuyerProfile />} />
         </Route>
 
         {/* Artisan Routes */}

@@ -1,20 +1,68 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import Button from '../components/Button';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.email || '');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('artisan'); // 'artisan' | 'admin'
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    // Demo Mode redirect based on selection
-    if (role === 'admin') {
-      navigate('/admin/dashboard');
-    } else {
-      navigate('/artisan/dashboard');
+    console.log("LOGIN SUBMITTED", { email });
+    setSubmitError('');
+    setIsSubmitting(true);
+
+    try {
+      console.log("Calling supabase.auth.signInWithPassword for email:", email);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      console.log("LOGIN RESPONSE received:", { data, error });
+
+      if (error) {
+        console.error("LOGIN ERROR DETECTED:", error);
+        setSubmitError(error.message);
+        return;
+      }
+
+      // Fetch user profile from profiles table to retrieve their database-defined role
+      console.log("Fetching profile for user ID:", data.user.id);
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      console.log("PROFILE RESPONSE received:", { profile, profileError });
+
+      if (profileError || !profile) {
+        console.error("PROFILE LOADING ERROR:", profileError);
+        setSubmitError(profileError?.message || 'User profile not found. Please contact support.');
+        return;
+      }
+
+      console.log("Database-authorized role found:", profile.role);
+
+      // Redirect to respective dashboard based on the database-authoritative role
+      if (profile.role === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (profile.role === 'artisan') {
+        navigate('/artisan/dashboard');
+      } else {
+        navigate('/');
+      }
+    } catch (err) {
+      console.error("LOGIN EXCEPTION THROWS:", err);
+      setSubmitError(err.message || 'An unexpected error occurred during login.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -28,29 +76,16 @@ export default function Login() {
         </p>
       </div>
 
-      {/* Demo Warning Notice */}
-      <div className="bg-amber-50 border border-amber-300 rounded p-4 text-xs text-amber-900 leading-relaxed">
-        <strong>⚠️ Prototype Notice:</strong> Authentication databases are not connected in this frontend-only stage. You can enter any mock credentials and select a role below to access the respective dashboards.
-      </div>
+      {/* Error Notice */}
+      {submitError && (
+        <div className="bg-red-100 border border-red-400 text-red-900 rounded p-4 text-sm font-semibold flex items-center gap-3">
+          <span className="text-2xl">⚠️</span>
+          <div>{submitError}</div>
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleLoginSubmit} className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4">
-        {/* Role Selector */}
-        <div className="space-y-1.5">
-          <label htmlFor="login-role" className="block text-sm font-bold text-slate-700">
-            Select Your Role
-          </label>
-          <select
-            id="login-role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-350 rounded focus:ring-2 focus:ring-gov-navy focus:border-gov-navy font-semibold text-slate-800"
-          >
-            <option value="artisan">Artisan (Self-Service Portal)</option>
-            <option value="admin">Government Administrator (Audit Panel)</option>
-          </select>
-        </div>
-
         {/* Email */}
         <div className="space-y-1.5">
           <label htmlFor="login-email" className="block text-sm font-bold text-slate-700">
@@ -87,8 +122,8 @@ export default function Login() {
         </div>
 
         {/* Submit */}
-        <Button type="submit" variant="primary" className="w-full py-2.5 mt-2 font-bold">
-          Login (Demo Mode)
+        <Button type="submit" variant="primary" className="w-full py-2.5 mt-2 font-bold" disabled={isSubmitting}>
+          {isSubmitting ? 'Logging in...' : 'Login'}
         </Button>
       </form>
 

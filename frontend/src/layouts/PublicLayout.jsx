@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/AuthContext';
 
 export default function PublicLayout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogoutClick = async () => {
+    await signOut();
+    setIsMenuOpen(false);
+    navigate('/login');
+  };
 
   const navLinks = [
     { to: '/', label: 'Home' },
@@ -58,25 +67,71 @@ export default function PublicLayout() {
                 </NavLink>
               ))}
 
-              <NavLink
-                to="/login"
-                className={({ isActive }) =>
-                  `text-base font-semibold px-4 py-2 rounded transition-colors ${
-                    isActive
-                      ? 'bg-slate-200 text-gov-navy'
-                      : 'text-gov-navy border border-gov-navy hover:bg-slate-50'
-                  }`
-                }
-              >
-                Login
-              </NavLink>
+              {user ? (
+                <>
+                  <span className="text-sm font-semibold text-slate-700">
+                    Welcome, {profile?.full_name || 'User'}
+                  </span>
+                  {profile?.role === 'buyer' && (
+                    <NavLink
+                      to="/profile"
+                      className={({ isActive }) =>
+                        `text-base font-semibold px-4 py-2 rounded transition-colors ${
+                          isActive
+                            ? 'bg-slate-200 text-gov-navy'
+                            : 'text-gov-navy border border-gov-navy hover:bg-slate-50'
+                        }`
+                      }
+                    >
+                      Profile
+                    </NavLink>
+                  )}
+                  {profile?.role === 'artisan' && (
+                    <Link
+                      to="/artisan/dashboard"
+                      className="bg-gov-navy hover:bg-gov-navy-light text-white font-semibold px-4 py-2 rounded transition-colors min-h-[44px] inline-flex items-center"
+                    >
+                      Dashboard
+                    </Link>
+                  )}
+                  {profile?.role === 'admin' && (
+                    <Link
+                      to="/admin/dashboard"
+                      className="bg-gov-navy hover:bg-gov-navy-light text-white font-semibold px-4 py-2 rounded transition-colors min-h-[44px] inline-flex items-center"
+                    >
+                      Admin Panel
+                    </Link>
+                  )}
+                  <button
+                    onClick={handleLogoutClick}
+                    className="text-slate-600 hover:text-red-655 font-semibold text-base cursor-pointer px-2"
+                  >
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <NavLink
+                    to="/login"
+                    className={({ isActive }) =>
+                      `text-base font-semibold px-4 py-2 rounded transition-colors ${
+                        isActive
+                          ? 'bg-slate-200 text-gov-navy'
+                          : 'text-gov-navy border border-gov-navy hover:bg-slate-50'
+                      }`
+                    }
+                  >
+                    Login
+                  </NavLink>
 
-              <Link
-                to="/register"
-                className="bg-gov-saffron hover:bg-gov-saffron-light text-white font-semibold px-4 py-2 rounded transition-colors min-h-[44px] inline-flex items-center"
-              >
-                Join as Artisan
-              </Link>
+                  <Link
+                    to="/register"
+                    className="bg-gov-saffron hover:bg-gov-saffron-light text-white font-semibold px-4 py-2 rounded transition-colors min-h-[44px] inline-flex items-center"
+                  >
+                    Join as Artisan
+                  </Link>
+                </>
+              )}
             </nav>
 
             {/* Mobile Menu Button */}
@@ -124,20 +179,63 @@ export default function PublicLayout() {
                 </NavLink>
               ))}
               <div className="border-t border-slate-200 my-2"></div>
-              <NavLink
-                to="/login"
-                onClick={() => setIsMenuOpen(false)}
-                className="block px-3 py-3 rounded-md text-base font-semibold text-gov-navy hover:bg-slate-200"
-              >
-                Login
-              </NavLink>
-              <Link
-                to="/register"
-                onClick={() => setIsMenuOpen(false)}
-                className="block px-3 py-3 rounded-md text-base font-semibold bg-gov-saffron text-white text-center hover:bg-gov-saffron-light"
-              >
-                Join as Artisan
-              </Link>
+              {user ? (
+                <>
+                  <div className="px-3 py-2 text-sm font-semibold text-slate-700">
+                    Welcome, {profile?.full_name || 'User'}
+                  </div>
+                  {profile?.role === 'buyer' && (
+                    <NavLink
+                      to="/profile"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 py-3 rounded-md text-base font-semibold text-gov-navy hover:bg-slate-200"
+                    >
+                      Profile
+                    </NavLink>
+                  )}
+                  {profile?.role === 'artisan' && (
+                    <Link
+                      to="/artisan/dashboard"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 py-3 rounded-md text-base font-semibold text-gov-navy hover:bg-slate-200"
+                    >
+                      Artisan Dashboard
+                    </Link>
+                  )}
+                  {profile?.role === 'admin' && (
+                    <Link
+                      to="/admin/dashboard"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 py-3 rounded-md text-base font-semibold text-gov-navy hover:bg-slate-200"
+                    >
+                      Admin Dashboard
+                    </Link>
+                  )}
+                  <button
+                    onClick={handleLogoutClick}
+                    className="w-full text-left block px-3 py-3 rounded-md text-base font-semibold text-red-655 hover:bg-red-50 cursor-pointer"
+                  >
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <NavLink
+                    to="/login"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block px-3 py-3 rounded-md text-base font-semibold text-gov-navy hover:bg-slate-200"
+                  >
+                    Login
+                  </NavLink>
+                  <Link
+                    to="/register"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block px-3 py-3 rounded-md text-base font-semibold bg-gov-saffron text-white text-center hover:bg-gov-saffron-light"
+                  >
+                    Join as Artisan
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}

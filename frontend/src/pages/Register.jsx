@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -9,9 +10,12 @@ export default function Register() {
     mobile: '',
     password: '',
     location: '',
-    category: 'Bamboo & Natural Craft'
+    category: 'Bamboo & Natural Craft',
+    role: 'buyer' // 'buyer' | 'artisan'
   });
-  const [showDemoAlert, setShowDemoAlert] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
 
   const categories = [
@@ -32,38 +36,128 @@ export default function Register() {
     }));
   };
 
-  const handleRegisterSubmit = (e) => {
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
-    setShowDemoAlert(true);
-    // Auto redirect after a short delay
-    setTimeout(() => {
-      navigate('/login');
-    }, 3000);
+    console.log("REGISTER SUBMITTED", {
+      role: formData.role,
+      email: formData.email,
+      name: formData.name,
+      mobile: formData.mobile
+    });
+    setSubmitError('');
+    setSuccessMessage('');
+    setIsSubmitting(true);
+
+    try {
+      const metadata = {
+        full_name: formData.name,
+        phone: formData.mobile,
+        role: formData.role
+      };
+
+      if (formData.role === 'artisan') {
+        metadata.location = formData.location;
+        metadata.category = formData.category;
+      }
+
+      console.log("Calling supabase.auth.signUp with metadata:", metadata);
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: metadata
+        }
+      });
+
+      console.log("SIGNUP RESPONSE received:", { data, error });
+
+      if (error) {
+        console.error("SIGNUP ERROR DETECTED:", error);
+        setSubmitError(error.message);
+        return;
+      }
+
+      // If the signup automatically signed in the user (session exists), sign them out to force formal login
+      if (data.session) {
+        console.log("Auto-login detected, signing out to force formal login...");
+        await supabase.auth.signOut();
+      }
+
+      // Save email for prefilling the login page, then clear form state
+      const registeredEmail = formData.email;
+      setFormData({
+        name: '',
+        email: '',
+        mobile: '',
+        password: '',
+        location: '',
+        category: 'Bamboo & Natural Craft',
+        role: 'buyer'
+      });
+
+      // Show success message and redirect to login after a 3-second delay
+      setSuccessMessage('Registration successful! Your account has been created. Please login to continue.');
+      
+      console.log("Register success flow completed. Redirect scheduled in 3s for email:", registeredEmail);
+      setTimeout(() => {
+        navigate('/login', { state: { email: registeredEmail } });
+      }, 3000);
+    } catch (err) {
+      console.error("SIGNUP EXCEPTION THROWS:", err);
+      setSubmitError(err.message || 'An unexpected error occurred during registration.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="max-w-lg mx-auto px-4 py-12 space-y-6">
       {/* Header */}
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-gov-navy m-0">Artisan Registration</h1>
+        <h1 className="text-2xl font-bold text-gov-navy m-0">Portal Registration</h1>
         <p className="text-sm text-slate-655">
           Join the national portal to access direct market linkages and smart AI cataloging.
         </p>
       </div>
 
-      {/* Demo Success Alert Popup */}
-      {showDemoAlert && (
-        <div className="bg-green-150 border border-green-400 text-green-900 rounded p-4 text-sm font-semibold flex items-center gap-3">
+      {/* Success Alert Popup */}
+      {successMessage && (
+        <div className="bg-green-100 border border-green-400 text-green-900 rounded p-4 text-sm font-semibold flex items-center gap-3">
           <span className="text-2xl">✓</span>
           <div>
-            Artisan registered successfully (Mock UI)! <br />
-            <span className="text-xs font-normal">Redirecting to login portal in 3 seconds...</span>
+            {successMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Error Alert Popup */}
+      {submitError && (
+        <div className="bg-red-100 border border-red-400 text-red-900 rounded p-4 text-sm font-semibold flex items-center gap-3">
+          <span className="text-2xl">⚠️</span>
+          <div>
+            {submitError}
           </div>
         </div>
       )}
 
       {/* Form */}
       <form onSubmit={handleRegisterSubmit} className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4">
+        {/* Role Selector */}
+        <div className="space-y-1.5">
+          <label htmlFor="role" className="block text-sm font-bold text-slate-700">
+            Select Your Role
+          </label>
+          <select
+            id="role"
+            value={formData.role}
+            onChange={handleInputChange}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-350 rounded focus:ring-2 focus:ring-gov-navy focus:border-gov-navy font-semibold text-slate-800"
+          >
+            <option value="buyer">Buyer (Customer / Public)</option>
+            <option value="artisan">Artisan (Producer / Self-Service Portal)</option>
+          </select>
+        </div>
+
         {/* Name */}
         <div className="space-y-1.5">
           <label htmlFor="name" className="block text-sm font-bold text-slate-700">
@@ -135,44 +229,48 @@ export default function Register() {
           />
         </div>
 
-        {/* Location */}
-        <div className="space-y-1.5">
-          <label htmlFor="location" className="block text-sm font-bold text-slate-700">
-            Location (Town, District, State)
-          </label>
-          <input
-            id="location"
-            type="text"
-            required
-            placeholder="e.g. Kondapalli, NTR District, Andhra Pradesh"
-            value={formData.location}
-            onChange={handleInputChange}
-            className="w-full px-3 py-2 border border-slate-350 rounded focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
-          />
-        </div>
+        {formData.role === 'artisan' && (
+          <>
+            {/* Location */}
+            <div className="space-y-1.5">
+              <label htmlFor="location" className="block text-sm font-bold text-slate-700">
+                Location (Town, District, State)
+              </label>
+              <input
+                id="location"
+                type="text"
+                required
+                placeholder="e.g. Kondapalli, NTR District, Andhra Pradesh"
+                value={formData.location}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-slate-350 rounded focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+              />
+            </div>
 
-        {/* Craft Category */}
-        <div className="space-y-1.5">
-          <label htmlFor="category" className="block text-sm font-bold text-slate-700">
-            Primary Craft Category
-          </label>
-          <select
-            id="category"
-            value={formData.category}
-            onChange={handleInputChange}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-350 rounded focus:ring-2 focus:ring-gov-navy focus:border-gov-navy font-semibold text-slate-800"
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
+            {/* Craft Category */}
+            <div className="space-y-1.5">
+              <label htmlFor="category" className="block text-sm font-bold text-slate-700">
+                Primary Craft Category
+              </label>
+              <select
+                id="category"
+                value={formData.category}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-350 rounded focus:ring-2 focus:ring-gov-navy focus:border-gov-navy font-semibold text-slate-800"
+              >
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
 
         {/* Submit */}
-        <Button type="submit" variant="accent" className="w-full py-2.5 mt-2 font-bold">
-          Register Artisan
+        <Button type="submit" variant="accent" className="w-full py-2.5 mt-2 font-bold" disabled={isSubmitting}>
+          {isSubmitting ? 'Registering...' : 'Register Account'}
         </Button>
       </form>
 

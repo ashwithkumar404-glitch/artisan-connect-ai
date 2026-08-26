@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/AuthContext';
 
 export default function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const { profile, signOut } = useAuth();
 
   const menuItems = [
     { to: '/admin/dashboard', label: 'Dashboard', icon: '🏛️' },
@@ -12,7 +14,8 @@ export default function AdminLayout() {
     { to: '/admin/products', label: 'Moderate Products', icon: '📦' },
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     navigate('/login');
   };
 
@@ -96,9 +99,11 @@ export default function AdminLayout() {
             </span>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium text-slate-600">Department Officer</span>
+            <span className="text-sm font-medium text-slate-600 font-sans">
+              Welcome, {profile?.full_name || 'Department Officer'}
+            </span>
             <div className="w-8 h-8 rounded-full bg-gov-navy text-white flex items-center justify-center font-bold text-sm">
-              GO
+              {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : 'GO'}
             </div>
           </div>
         </header>
