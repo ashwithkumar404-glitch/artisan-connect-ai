@@ -1,28 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import Button from '../../components/Button';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 
-export default function NewProduct() {
+export default function EditProduct() {
+  const { id } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [name, setName] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
   const [stockQuantity, setStockQuantity] = useState('0');
-  
-  // Image selection states
+
+  // Image management states
+  const [existingImageUrl, setExistingImageUrl] = useState('');
+  const [originalImageUrl, setOriginalImageUrl] = useState(''); // Keep track to delete from storage if replaced
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
-  
+
   const [categoriesList, setCategoriesList] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [categoriesError, setCategoriesError] = useState('');
+  
+  const [loadingProduct, setLoadingProduct] = useState(true);
+  const [productError, setProductError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  
-  const navigate = useNavigate();
 
   // Cleanup object URLs to prevent memory leaks
   useEffect(() => {
@@ -33,41 +39,101 @@ export default function NewProduct() {
     };
   }, [imagePreviewUrl]);
 
+  // Load categories and product details
   useEffect(() => {
     let active = true;
-    async function loadCategories() {
+
+    async function loadData() {
+      if (!user) return;
+
       try {
         setLoadingCategories(true);
+        setLoadingProduct(true);
+        setProductError('');
         setCategoriesError('');
-        const { data, error } = await supabase
+
+        // 1. Fetch categories
+        const { data: cats, error: catError } = await supabase
           .from('categories')
           .select('id, name')
           .order('name', { ascending: true });
-        
-        if (error) throw error;
-        
+
+        if (catError) throw catError;
+
         if (active) {
-          setCategoriesList(data || []);
-          if (data && data.length > 0) {
-            setSelectedCategoryId(data[0].id);
+          setCategoriesList(cats || []);
+        }
+
+        // 2. Fetch corresponding artisan record
+        const { data: artisan, error: artisanError } = await supabase
+          .from('artisans')
+          .select('id')
+          .eq('profile_id', user.id)
+          .maybeSingle();
+
+        if (artisanError) throw artisanError;
+
+        if (!artisan) {
+          throw new Error('No artisan profile found. You must be registered as an artisan to edit products.');
+        }
+
+        // 3. Fetch product details
+        const { data: product, error: productError } = await supabase
+          .from('products')
+          .select(`
+            id,
+            artisan_id,
+            category_id,
+            name,
+            description,
+            price,
+            stock_quantity,
+            product_images (
+              image_url
+            )
+          `)
+          .eq('id', id)
+          .single();
+
+        if (productError) throw productError;
+
+        if (product.artisan_id !== artisan.id) {
+          throw new Error('Access Denied. You do not have permission to edit this product.');
+        }
+
+        // 4. Pre-populate form fields
+        if (active) {
+          setName(product.name || '');
+          setSelectedCategoryId(product.category_id || '');
+          setPrice(product.price ? String(product.price) : '');
+          setDescription(product.description || '');
+          setStockQuantity(product.stock_quantity ? String(product.stock_quantity) : '0');
+
+          const imageRecs = product.product_images || [];
+          if (imageRecs.length > 0) {
+            setExistingImageUrl(imageRecs[0].image_url);
+            setOriginalImageUrl(imageRecs[0].image_url);
           }
         }
       } catch (err) {
-        console.error('Error fetching categories:', err);
+        console.error('Error fetching product for editing:', err);
         if (active) {
-          setCategoriesError('Failed to load categories. Please refresh the page.');
+          setProductError(err.message || 'Failed to load product details.');
         }
       } finally {
         if (active) {
           setLoadingCategories(false);
+          setLoadingProduct(false);
         }
       }
     }
-    loadCategories();
+
+    loadData();
+
     return () => {
       active = false;
     };
-  }, []);
+  }, [id, user]);
 
   const handleImageChange = (e) => {
     setSubmitError('');
@@ -102,6 +168,7 @@ export default function NewProduct() {
     }
     setImageFile(null);
     setImagePreviewUrl('');
+    setExistingImageUrl(''); // Mark existing image as deleted
     const fileInput = document.getElementById('prod-image');
     if (fileInput) fileInput.value = '';
   };
@@ -111,164 +178,185 @@ export default function NewProduct() {
     setSubmitError('');
     setIsSubmitting(true);
 
-    let createdProductId = null;
-    let uploadedStoragePath = null;
-
     try {
       // 1. Client-side Validation
       if (!name.trim()) {
-        setSubmitError('Product name is required.');
-        setIsSubmitting(false);
-        return;
+        throw new Error('Product name is required.');
       }
       if (!selectedCategoryId) {
-        setSubmitError('Product category is required.');
-        setIsSubmitting(false);
-        return;
+        throw new Error('Product category is required.');
       }
       
       const parsedPrice = parseFloat(price);
       if (isNaN(parsedPrice) || parsedPrice < 0) {
-        setSubmitError('Price must be a valid positive number.');
-        setIsSubmitting(false);
-        return;
+        throw new Error('Price must be a valid positive number.');
       }
 
       const parsedStock = parseInt(stockQuantity, 10);
       if (isNaN(parsedStock) || parsedStock < 0 || !Number.isInteger(parsedStock)) {
-        setSubmitError('Stock quantity must be a non-negative integer.');
-        setIsSubmitting(false);
-        return;
+        throw new Error('Stock quantity must be a non-negative integer.');
       }
 
-      // Get authenticated user
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-      
-      const currentUser = session?.user || user;
-      if (!currentUser) {
-        setSubmitError('You must be logged in to add a product.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Fetch corresponding artisan record
+      // Verify artisan profile
       const { data: artisan, error: artisanError } = await supabase
         .from('artisans')
         .select('id')
-        .eq('profile_id', currentUser.id)
+        .eq('profile_id', user.id)
         .maybeSingle();
 
-      if (artisanError) {
-        console.error('Error verifying artisan profile:', artisanError);
-        throw new Error('Failed to verify artisan account status.');
-      }
-
+      if (artisanError) throw artisanError;
       if (!artisan) {
-        setSubmitError('No artisan profile found for your account. You must register as an artisan to add products.');
-        setIsSubmitting(false);
-        return;
+        throw new Error('No artisan profile found. You must be registered as an artisan to save changes.');
       }
 
-      // 2. Insert product and obtain product ID
-      const { data: newProduct, error: insertError } = await supabase
+      // 2. Update product row in public.products
+      const { error: updateError } = await supabase
         .from('products')
-        .insert({
-          artisan_id: artisan.id,
+        .update({
           category_id: selectedCategoryId,
           name: name.trim(),
           description: description.trim() || null,
           price: parsedPrice,
-          stock_quantity: parsedStock,
-          status: 'draft'
+          stock_quantity: parsedStock
         })
-        .select()
-        .single();
+        .eq('id', id)
+        .eq('artisan_id', artisan.id);
 
-      if (insertError) {
-        console.error('Database product insertion failed:', insertError);
-        throw new Error(insertError.message || 'Error inserting product into the database.');
-      }
+      if (updateError) throw updateError;
 
-      createdProductId = newProduct.id;
-
-      // 3. Upload image if selected
+      // 3. Handle image adjustments
       if (imageFile) {
+        // A new file was selected to replace/add
         const fileExt = imageFile.name.split('.').pop();
         const uniqueFileName = `${crypto.randomUUID()}.${fileExt}`;
-        const storagePath = `${artisan.id}/${createdProductId}/${uniqueFileName}`;
+        const storagePath = `${artisan.id}/${id}/${uniqueFileName}`;
         
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        // A. Upload new file to Storage
+        const { error: uploadError } = await supabase.storage
           .from('product-images')
           .upload(storagePath, imageFile);
 
         if (uploadError) {
-          console.error('Image upload to storage failed:', uploadError);
-          // Compensating cleanup: Delete newly created product row
-          await supabase.from('products').delete().eq('id', createdProductId);
-          createdProductId = null; // Mark cleaned up
-          throw new Error(`Product draft created, but image upload failed: ${uploadError.message}`);
+          throw new Error(`Product details saved, but failed to upload new image: ${uploadError.message}`);
         }
 
-        uploadedStoragePath = storagePath;
-
-        // 4. Get the public URL
+        // B. Get public URL of new image
         const { data: urlData } = supabase.storage
           .from('product-images')
           .getPublicUrl(storagePath);
         
         const publicUrl = urlData.publicUrl;
 
-        // 5. Insert image record into public.product_images
-        const { error: imageDbError } = await supabase
-          .from('product_images')
-          .insert({
-            product_id: createdProductId,
-            image_url: publicUrl,
-            display_order: 0
-          });
+        // C. Update database product_images record
+        if (originalImageUrl) {
+          // Update the existing row
+          const { error: imgDbError } = await supabase
+            .from('product_images')
+            .update({ image_url: publicUrl })
+            .eq('product_id', id);
 
-        if (imageDbError) {
-          console.error('Saving image database record failed:', imageDbError);
-          
-          // Compensating cleanup:
-          // A. Remove uploaded file from storage
-          await supabase.storage.from('product-images').remove([uploadedStoragePath]);
-          uploadedStoragePath = null; // Mark cleaned up
-          // B. Delete product row
-          await supabase.from('products').delete().eq('id', createdProductId);
-          createdProductId = null; // Mark cleaned up
-          
-          throw new Error(`Product draft created, but database failed to save image details: ${imageDbError.message}`);
+          if (imgDbError) {
+            // Cleanup uploaded file to avoid orphans
+            await supabase.storage.from('product-images').remove([storagePath]);
+            throw new Error(`Product details saved, but failed to update image database details: ${imgDbError.message}`);
+          }
+
+          // D. Delete the old file from Storage
+          if (originalImageUrl.includes('/public/product-images/')) {
+            const oldPath = originalImageUrl.split('/public/product-images/')[1];
+            if (oldPath) {
+              await supabase.storage.from('product-images').remove([oldPath]);
+            }
+          }
+        } else {
+          // Insert a new row
+          const { error: imgDbError } = await supabase
+            .from('product_images')
+            .insert({
+              product_id: id,
+              image_url: publicUrl,
+              display_order: 0
+            });
+
+          if (imgDbError) {
+            await supabase.storage.from('product-images').remove([storagePath]);
+            throw new Error(`Product details saved, but failed to insert image database details: ${imgDbError.message}`);
+          }
+        }
+      } else if (!existingImageUrl && originalImageUrl) {
+        // The user explicitly removed the existing image
+        // A. Delete database image record
+        const { error: imgDbError } = await supabase
+          .from('product_images')
+          .delete()
+          .eq('product_id', id);
+
+        if (imgDbError) throw imgDbError;
+
+        // B. Remove old file from Storage
+        if (originalImageUrl.includes('/public/product-images/')) {
+          const oldPath = originalImageUrl.split('/public/product-images/')[1];
+          if (oldPath) {
+            await supabase.storage.from('product-images').remove([oldPath]);
+          }
         }
       }
 
-      // Redirect to products catalog on success
+      // Redirect to catalog on success
       navigate('/artisan/products', {
-        state: { successMessage: 'Product created successfully!' }
+        state: { successMessage: 'Product updated successfully!' }
       });
     } catch (err) {
-      console.error('Error submitting product:', err);
-      setSubmitError(err.message || 'An unexpected error occurred while saving the product.');
+      console.error('Error updating product:', err);
+      setSubmitError(err.message || 'An unexpected error occurred while saving.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (loadingProduct) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-10 h-10 border-4 border-gov-navy border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-semibold text-slate-500">Loading product details for editing...</p>
+      </div>
+    );
+  }
+
+  if (productError) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 bg-red-50 border border-red-200 rounded-full flex items-center justify-center mx-auto shadow-inner text-red-655 font-bold text-3xl">
+          ⚠️
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-slate-800">Cannot Edit Product</h2>
+          <p className="text-slate-550 text-sm leading-relaxed">{productError}</p>
+        </div>
+        <div className="pt-4">
+          <Link to="/artisan/products">
+            <button className="bg-gov-navy hover:bg-gov-navy-light text-white text-sm font-bold px-5 py-2.5 rounded transition-colors cursor-pointer min-h-[40px] shadow-sm">
+              ← Return to Catalog
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="border-b border-slate-200 pb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gov-navy m-0">Add New Product</h2>
-          <p className="text-sm text-slate-500 mt-1">Create a catalog listing for your handicraft.</p>
+          <h2 className="text-xl font-bold text-gov-navy m-0">Edit Product</h2>
+          <p className="text-sm text-slate-500 mt-1">Modify your catalog listing details.</p>
         </div>
         <Link to="/artisan/products" className="text-sm font-semibold text-slate-600 hover:text-gov-navy">
           ← Cancel
         </Link>
       </div>
 
-      {/* Main Grid: Form Left, AI Assistant Right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Form Column */}
         <div className="lg:col-span-2">
@@ -382,15 +470,15 @@ export default function NewProduct() {
             {/* Image Selector & Preview */}
             <div className="space-y-1.5">
               <label className="block text-sm font-bold text-slate-700">
-                Upload Product Photo (Optional)
+                Product Image
               </label>
-              
+
               {imagePreviewUrl ? (
-                // Image Preview Mode
+                // New Image Preview Mode
                 <div className="relative border border-slate-200 rounded-lg p-2 bg-slate-50 flex flex-col items-center">
                   <img
                     src={imagePreviewUrl}
-                    alt="Product preview"
+                    alt="New preview"
                     className="max-h-48 object-contain rounded border border-slate-200"
                   />
                   <div className="mt-3 flex gap-2 w-full">
@@ -398,12 +486,41 @@ export default function NewProduct() {
                       type="button"
                       onClick={handleRemoveImage}
                       disabled={isSubmitting}
-                      className="bg-red-50 hover:bg-red-100 text-red-750 text-xs font-bold px-3 py-2 rounded border border-red-200 cursor-pointer flex-grow text-center transition-colors disabled:opacity-50"
+                      className="bg-red-55 hover:bg-red-100 text-red-750 text-xs font-bold px-3 py-2 rounded border border-red-200 cursor-pointer flex-grow text-center transition-colors disabled:opacity-50"
                     >
-                      ✕ Remove Image
+                      ✕ Remove / Delete Image
                     </button>
-                    <label className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded cursor-pointer flex-grow text-center transition-colors disabled:opacity-50 inline-flex items-center justify-center">
-                      Change Image
+                    <label className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-750 text-xs font-bold px-3 py-2 rounded cursor-pointer flex-grow text-center transition-colors disabled:opacity-50 inline-flex items-center justify-center">
+                      Change Image Selection
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={isSubmitting}
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : existingImageUrl ? (
+                // Existing Image Display
+                <div className="relative border border-slate-200 rounded-lg p-2 bg-slate-50 flex flex-col items-center">
+                  <img
+                    src={existingImageUrl}
+                    alt="Current product photo"
+                    className="max-h-48 object-contain rounded border border-slate-200"
+                  />
+                  <div className="mt-3 flex gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      disabled={isSubmitting}
+                      className="bg-red-55 hover:bg-red-100 text-red-750 text-xs font-bold px-3 py-2 rounded border border-red-200 cursor-pointer flex-grow text-center transition-colors disabled:opacity-50"
+                    >
+                      ✕ Delete Existing Image
+                    </button>
+                    <label className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-750 text-xs font-bold px-3 py-2 rounded cursor-pointer flex-grow text-center transition-colors disabled:opacity-50 inline-flex items-center justify-center">
+                      Replace Image
                       <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
@@ -415,13 +532,13 @@ export default function NewProduct() {
                   </div>
                 </div>
               ) : (
-                // File Picker Mode
+                // File Picker Mode (if no image currently exists)
                 <label
                   htmlFor="prod-image"
                   className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 cursor-pointer block hover:border-gov-navy transition-colors"
                 >
                   <span className="text-2xl" role="img" aria-label="Camera icon">📷</span>
-                  <p className="text-xs text-slate-500 mt-2 font-semibold">Click to select product image (JPEG, PNG, WebP)</p>
+                  <p className="text-xs text-slate-500 mt-2 font-semibold">Click to upload product image (JPEG, PNG, WebP)</p>
                   <p className="text-[10px] text-slate-400 mt-1">Maximum file size: 5 MB</p>
                   <input
                     id="prod-image"
@@ -438,7 +555,7 @@ export default function NewProduct() {
             {/* Actions */}
             <div className="flex gap-3 pt-2">
               <Button type="submit" variant="primary" className="font-bold flex-grow" disabled={isSubmitting || loadingCategories}>
-                {isSubmitting ? 'Saving & Uploading...' : 'Save Product Draft'}
+                {isSubmitting ? 'Saving Changes...' : 'Save Product Changes'}
               </Button>
               <Link to="/artisan/products" className="flex-grow">
                 <Button variant="outline" className="w-full font-bold" disabled={isSubmitting}>

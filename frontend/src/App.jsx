@@ -9,6 +9,7 @@ import AdminLayout from './layouts/AdminLayout';
 // Public Pages
 import Home from './pages/Home';
 import Explore from './pages/Explore';
+import ProductDetails from './pages/ProductDetails';
 import About from './pages/About';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -18,6 +19,7 @@ import BuyerProfile from './pages/BuyerProfile';
 import ArtisanDashboard from './pages/artisan/Dashboard';
 import Products from './pages/artisan/Products';
 import NewProduct from './pages/artisan/NewProduct';
+import EditProduct from './pages/artisan/EditProduct';
 import Enquiries from './pages/artisan/Enquiries';
 import Profile from './pages/artisan/Profile';
 import Verification from './pages/artisan/Verification';
@@ -51,6 +53,7 @@ export default function App() {
         <Route path="/" element={<PublicLayout />}>
           <Route index element={<Home />} />
           <Route path="explore" element={<Explore />} />
+          <Route path="product/:id" element={<ProductDetails />} />
           <Route path="about" element={<About />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
@@ -63,6 +66,7 @@ export default function App() {
           <Route path="dashboard" element={<ArtisanDashboard />} />
           <Route path="products" element={<Products />} />
           <Route path="products/new" element={<NewProduct />} />
+          <Route path="products/edit/:id" element={<EditProduct />} />
           <Route path="enquiries" element={<Enquiries />} />
           <Route path="profile" element={<Profile />} />
           <Route path="verification" element={<Verification />} />

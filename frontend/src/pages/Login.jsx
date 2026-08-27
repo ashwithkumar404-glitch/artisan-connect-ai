@@ -56,7 +56,8 @@ export default function Login() {
       } else if (profile.role === 'artisan') {
         navigate('/artisan/dashboard');
       } else {
-        navigate('/');
+        const redirectPath = location.state?.from || '/';
+        navigate(redirectPath);
       }
     } catch (err) {
       console.error("LOGIN EXCEPTION THROWS:", err);
