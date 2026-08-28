@@ -1,0 +1,27 @@
+# Tasks — Step 7.5 Customer Enquiries & Artisan Product Management
+
+- [x] Create SQL Setup migration script (`supabase_enquiries_setup.sql`)
+  - [x] Define enquiries table schema and performance indexes
+  - [x] Configure SELECT, INSERT, and UPDATE RLS security rules on enquiries
+  - [x] Allow public SELECT access to artisan profiles and records to fix display issues
+  - [x] Permit published status updates on product edits RLS
+- [x] Fix public Product Details enquiries flow and redirects
+  - [x] Retrieve product `artisan_id` and nested `artisans.id` inside details query
+  - [x] Implement "Login Required" modal and state redirect back to product URL
+  - [x] Implement "Send Enquiry" modal with message content validation and duplicate protection
+  - [x] Display warning notices if logged-in user is an artisan or admin
+- [x] Implement artisan enquiries tracking panel (`Enquiries.jsx`)
+  - [x] Fetch enquiries directed to the active artisan using joined relationships
+  - [x] Display customer name/email, product title, message text, and badges
+  - [x] Allow changing enquiry status to 'read' or 'closed'
+  - [x] Provide a direct mailto action link that marks the log as 'replied'
+- [x] Integrate product unpublishing and deleting inside catalog list (`Products.jsx`)
+  - [x] Implement confirmation alerts for unpublishing and set status to 'draft'
+  - [x] Implement confirmation alerts for deletion
+  - [x] Implement files cleanup in Supabase Storage before database deletion
+  - [x] Render actions based on status (`[Edit] [Publish] [Delete]` or `[Edit] [Unpublish] [Delete]`)
+- [x] Build the product editing page component (`EditProduct.jsx`)
+  - [x] Pre-populate form inputs and enforce artisan owner authentication check
+  - [x] Support keeping the existing image, replacing it (with old file cleanup), or removing it
+  - [x] Register `/artisan/products/edit/:id` routing in `App.jsx`
+- [x] Run build verification to ensure zero compile warnings/errors
