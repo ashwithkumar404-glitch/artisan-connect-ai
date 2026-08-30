@@ -1,4 +1,5 @@
-// Deno Serverless Edge Function for Automatic Product Metadata Generation
+import { generateGeminiContent } from '../_shared/gemini.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -11,14 +12,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Fetch Google Gemini API key from environment secrets
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!geminiKey) {
-      return new Response(
-        JSON.stringify({ error: 'GEMINI_API_KEY secret is not set in the Supabase workspace.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // 1. Deno environment key checks are now managed by the shared helper.
+
 
     // 2. Parse request JSON parameters
     if (req.method !== 'POST') {
@@ -49,8 +44,6 @@ Deno.serve(async (req) => {
     console.log("- Existing description present:", !!existingDescription);
 
     // 3. Configure Gemini Multimodal Prompt and Payload
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-
     const promptText = `You are a product cataloguing assistant for Artisan Connect AI, a marketplace for traditional Indian artisans.
 Analyze the provided product information (which may include a product photo, an audio transcript, and/or a manually typed description) and generate high-quality product cataloguing metadata.
 
@@ -114,26 +107,10 @@ Do not write markdown format (no \`\`\`json wrappers), no comment lines, and no 
       },
     };
 
-    console.log("Sending request to Google Gemini API using model 'gemini-2.5-flash'...");
+    console.log("Sending request to Google Gemini API...");
 
-    // 4. Send request to Google Gemini API
-    const response = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(apiBody),
-    });
-
-    console.log("Gemini API response status:", response.status);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini API error:", errText);
-      throw new Error(`Gemini API returned error ${response.status}: ${errText}`);
-    }
-
-    const resJson = await response.json();
+    // 4. Send request using shared helper
+    const resJson = await generateGeminiContent(apiBody);
     const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textResult) {
@@ -171,6 +148,15 @@ Do not write markdown format (no \`\`\`json wrappers), no comment lines, and no 
 
   } catch (error) {
     console.error('Error in generate-product function:', error);
+    if (error.message === 'AI_QUOTA_EXHAUSTED') {
+      return new Response(
+        JSON.stringify({
+          code: 'AI_QUOTA_EXHAUSTED',
+          message: 'AI service is temporarily unavailable. Please try again shortly.'
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

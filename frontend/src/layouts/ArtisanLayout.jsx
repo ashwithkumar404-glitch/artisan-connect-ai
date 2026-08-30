@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
+import NotificationBell from '../components/NotificationBell';
 
 export default function ArtisanLayout() {
+  console.log('ArtisanLayout rendering!');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
@@ -28,18 +30,21 @@ export default function ArtisanLayout() {
         <Link to="/artisan/dashboard" className="font-bold text-lg">
           Artisan Portal
         </Link>
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-1 rounded focus:outline-none focus:ring-2 focus:ring-slate-300 min-h-[44px] min-w-[44px]"
-          aria-expanded={isSidebarOpen}
-          aria-label="Toggle navigation menu"
-        >
+        <div className="flex items-center space-x-2">
+          <NotificationBell light={true} />
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-1 rounded focus:outline-none focus:ring-2 focus:ring-slate-300 min-h-[44px] min-w-[44px]"
+            aria-expanded={isSidebarOpen}
+            aria-label="Toggle navigation menu"
+          >
           {isSidebarOpen ? (
             <span className="text-xl">✕</span>
           ) : (
             <span className="text-xl">☰</span>
           )}
         </button>
+        </div>
       </header>
 
       {/* Sidebar for navigation */}
@@ -96,11 +101,12 @@ export default function ArtisanLayout() {
         <header className="bg-white border-b border-slate-200 px-6 py-4 hidden md:flex items-center justify-between">
           <div className="flex items-center">
             <h1 className="text-xl font-bold text-gov-navy m-0">Artisan Workspace</h1>
-            <span className="ml-3 bg-slate-100 text-slate-700 border border-slate-300 text-xs px-2.5 py-1 rounded font-semibold">
-              Prototype Mode
+            <span className="ml-3 bg-gov-saffron-light/20 text-gov-saffron border border-gov-saffron/30 text-xs px-2.5 py-1 rounded font-semibold">
+              Artisan Connect AI
             </span>
           </div>
           <div className="flex items-center space-x-4">
+            <NotificationBell />
             <span className="text-sm font-medium text-slate-600 font-sans">
               Welcome, {profile?.full_name || 'Artisan'}
             </span>

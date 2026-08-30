@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
+import NotificationBell from '../components/NotificationBell';
 
 export default function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -26,18 +27,21 @@ export default function AdminLayout() {
         <Link to="/admin/dashboard" className="font-bold text-lg">
           Gov Admin Console
         </Link>
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-1 rounded focus:outline-none focus:ring-2 focus:ring-slate-300 min-h-[44px] min-w-[44px]"
-          aria-expanded={isSidebarOpen}
-          aria-label="Toggle navigation menu"
-        >
+        <div className="flex items-center space-x-2">
+          <NotificationBell light={true} />
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-1 rounded focus:outline-none focus:ring-2 focus:ring-slate-300 min-h-[44px] min-w-[44px]"
+            aria-expanded={isSidebarOpen}
+            aria-label="Toggle navigation menu"
+          >
           {isSidebarOpen ? (
             <span className="text-xl">✕</span>
           ) : (
             <span className="text-xl">☰</span>
           )}
         </button>
+        </div>
       </header>
 
       {/* Sidebar Panel */}
@@ -99,6 +103,7 @@ export default function AdminLayout() {
             </span>
           </div>
           <div className="flex items-center space-x-4">
+            <NotificationBell />
             <span className="text-sm font-medium text-slate-600 font-sans">
               Welcome, {profile?.full_name || 'Department Officer'}
             </span>

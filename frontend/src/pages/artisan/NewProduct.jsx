@@ -11,6 +11,50 @@ const formatTime = (seconds) => {
   return `${mins < 10 ? '0' + mins : mins}:${secs < 10 ? '0' + secs : secs}`;
 };
 
+const safeInvokeAI = async (functionName, options) => {
+  const { data, error } = await supabase.functions.invoke(functionName, options);
+  
+  if (error) {
+    console.error(`Edge Function ${functionName} returned error:`, error);
+    let errorMsg = error.message || 'AI service failed. Please try again.';
+    
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
+        console.error(`Edge Function ${functionName} HTTP error body:`, body);
+        if (body && (body.code === 'AI_QUOTA_EXHAUSTED' || body.error === 'AI_QUOTA_EXHAUSTED' || body.message === 'AI_QUOTA_EXHAUSTED')) {
+          errorMsg = 'AI_QUOTA_EXHAUSTED';
+        } else if (body && body.error) {
+          errorMsg = body.error;
+        } else if (body && body.message) {
+          errorMsg = body.message;
+        }
+      } catch (_) {
+        try {
+          const text = await error.context.text();
+          console.error(`Edge Function ${functionName} HTTP error text:`, text);
+          if (text && text.includes('AI_QUOTA_EXHAUSTED')) {
+            errorMsg = 'AI_QUOTA_EXHAUSTED';
+          } else {
+            errorMsg = text || errorMsg;
+          }
+        } catch (__) {}
+      }
+    }
+    
+    if (errorMsg === 'AI_QUOTA_EXHAUSTED' || errorMsg.includes('AI_QUOTA_EXHAUSTED')) {
+      throw new Error('🤖 AI service is temporarily busy. Please try again shortly.');
+    }
+    throw new Error(errorMsg);
+  }
+  
+  if (data && (data.error === 'AI_QUOTA_EXHAUSTED' || data.code === 'AI_QUOTA_EXHAUSTED')) {
+    throw new Error('🤖 AI service is temporarily busy. Please try again shortly.');
+  }
+  
+  return { data, error: null };
+};
+
 export default function NewProduct() {
   const { user } = useAuth();
   const [name, setName] = useState('');
@@ -220,18 +264,13 @@ export default function NewProduct() {
       const base64Data = resBase64.split(',')[1];
       console.log("Invoking Edge Function 'analyze-image' with base64 size:", Math.round(base64Data.length / 1024) + " KB");
 
-      // Invoke Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('analyze-image', {
+      // Invoke Supabase Edge Function using helper
+      const { data } = await safeInvokeAI('analyze-image', {
         body: {
           image: base64Data,
           mimeType: imageFile.type
         }
       });
-
-      if (error) {
-        console.error('Supabase Edge Function invocation failed:', error);
-        throw new Error(error.message || 'AI analysis failed. Please try again.');
-      }
 
       console.log("Edge Function response received:", data);
 
@@ -386,31 +425,12 @@ export default function NewProduct() {
 
     console.log(`Invoking Edge Function 'transcribe-voice' with MIME: ${mimeType}`);
 
-    const { data, error } = await supabase.functions.invoke('transcribe-voice', {
+    const { data } = await safeInvokeAI('transcribe-voice', {
       body: {
         audio: base64Data,
         mimeType
       }
     });
-
-    if (error) {
-      console.error('Supabase Edge Function transcribe-voice failed:', error);
-      let errorMsg = error.message || 'Unknown network error';
-      if (error instanceof FunctionsHttpError) {
-        try {
-          const body = await error.context.json();
-          console.error("Transcribe Voice HTTP error body:", body);
-          errorMsg = body.error || errorMsg;
-        } catch (_) {
-          try {
-            const text = await error.context.text();
-            console.error("Transcribe Voice HTTP error text:", text);
-            errorMsg = text || errorMsg;
-          } catch (__) {}
-        }
-      }
-      throw new Error(errorMsg);
-    }
 
     console.log("Transcription response received:", data);
     
@@ -469,7 +489,7 @@ export default function NewProduct() {
       }
 
       console.log("Invoking Edge Function 'price-intelligence'...");
-      const { data, error } = await supabase.functions.invoke('price-intelligence', {
+      const { data } = await safeInvokeAI('price-intelligence', {
         body: {
           productName,
           category,
@@ -478,11 +498,6 @@ export default function NewProduct() {
           similarProducts: validSimilar
         }
       });
-
-      if (error) {
-        console.error("price-intelligence failed:", error);
-        throw new Error(error.message || "Failed to analyze marketplace prices.");
-      }
 
       console.log("price-intelligence result:", data);
       setPriceIntelligenceResult(data);
@@ -541,7 +556,7 @@ export default function NewProduct() {
       }
 
       console.log("Invoking Edge Function 'generate-product'...");
-      const { data, error } = await supabase.functions.invoke('generate-product', {
+      const { data } = await safeInvokeAI('generate-product', {
         body: {
           image: base64Image,
           mimeType,
@@ -549,11 +564,6 @@ export default function NewProduct() {
           description: manualDesc
         }
       });
-
-      if (error) {
-        console.error('Edge Function generate-product failed:', error);
-        throw new Error(error.message || 'AI product generation failed. Please try again.');
-      }
 
       console.log("Product metadata generation response:", data);
       
@@ -724,7 +734,7 @@ export default function NewProduct() {
     let generatedData = null;
     try {
       console.log("Invoking generate-product from orchestrator...");
-      const { data, error } = await supabase.functions.invoke('generate-product', {
+      const { data } = await safeInvokeAI('generate-product', {
         body: {
           image: base64Image,
           mimeType,
@@ -732,8 +742,6 @@ export default function NewProduct() {
           description: activeDescription || null
         }
       });
-
-      if (error) throw error;
       if (!data || !data.product_name) throw new Error("Malformed metadata returned from AI model.");
       
       generatedData = data;
@@ -941,7 +949,7 @@ export default function NewProduct() {
       // Fetch corresponding artisan record
       const { data: artisan, error: artisanError } = await supabase
         .from('artisans')
-        .select('id')
+        .select('id, verification_status')
         .eq('profile_id', currentUser.id)
         .maybeSingle();
 
@@ -952,6 +960,12 @@ export default function NewProduct() {
 
       if (!artisan) {
         setSubmitError('No artisan profile found for your account. You must register as an artisan to add products.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (publishStatus === 'published' && artisan.verification_status !== 'approved') {
+        setSubmitError("⚠️ Verification Required\nYour artisan account must be verified before you can publish products.");
         setIsSubmitting(false);
         return;
       }
@@ -1594,9 +1608,19 @@ export default function NewProduct() {
           <form ref={formRef} onSubmit={handleFormSubmit} className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4">
             {/* Error Notice */}
             {submitError && (
-              <div className="bg-red-100 border border-red-400 text-red-900 rounded p-4 text-sm font-semibold flex items-center gap-3">
-                <span className="text-2xl">⚠️</span>
-                <div>{submitError}</div>
+              <div className="bg-red-100 border border-red-400 text-red-900 rounded p-4 text-sm font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>{submitError}</div>
+                </div>
+                {submitError.includes('verification is required') && (
+                  <Link
+                    to="/artisan/verification"
+                    className="bg-gov-navy hover:bg-gov-navy-light text-white font-semibold text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center min-h-[32px] w-fit shadow-sm"
+                  >
+                    🛡️ Start Verification
+                  </Link>
+                )}
               </div>
             )}
 

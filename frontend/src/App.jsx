@@ -27,6 +27,7 @@ import Verification from './pages/artisan/Verification';
 // Admin Pages
 import AdminDashboard from './pages/admin/Dashboard';
 import VerificationQueue from './pages/admin/VerificationQueue';
+import VerificationReview from './pages/admin/VerificationReview';
 import ArtisansList from './pages/admin/ArtisansList';
 import ProductsModeration from './pages/admin/ProductsModeration';
 
@@ -34,6 +35,7 @@ import { useAuth } from './lib/AuthContext';
 
 export default function App() {
   const { loading } = useAuth();
+  console.log('App.jsx rendering, loading is:', loading);
 
   if (loading) {
     return (
@@ -77,6 +79,7 @@ export default function App() {
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="verification" element={<VerificationQueue />} />
+          <Route path="verifications/:id" element={<VerificationReview />} />
           <Route path="artisans" element={<ArtisansList />} />
           <Route path="products" element={<ProductsModeration />} />
         </Route>

@@ -11,6 +11,50 @@ const formatTime = (seconds) => {
   return `${mins < 10 ? '0' + mins : mins}:${secs < 10 ? '0' + secs : secs}`;
 };
 
+const safeInvokeAI = async (functionName, options) => {
+  const { data, error } = await supabase.functions.invoke(functionName, options);
+  
+  if (error) {
+    console.error(`Edge Function ${functionName} returned error:`, error);
+    let errorMsg = error.message || 'AI service failed. Please try again.';
+    
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
+        console.error(`Edge Function ${functionName} HTTP error body:`, body);
+        if (body && (body.code === 'AI_QUOTA_EXHAUSTED' || body.error === 'AI_QUOTA_EXHAUSTED' || body.message === 'AI_QUOTA_EXHAUSTED')) {
+          errorMsg = 'AI_QUOTA_EXHAUSTED';
+        } else if (body && body.error) {
+          errorMsg = body.error;
+        } else if (body && body.message) {
+          errorMsg = body.message;
+        }
+      } catch (_) {
+        try {
+          const text = await error.context.text();
+          console.error(`Edge Function ${functionName} HTTP error text:`, text);
+          if (text && text.includes('AI_QUOTA_EXHAUSTED')) {
+            errorMsg = 'AI_QUOTA_EXHAUSTED';
+          } else {
+            errorMsg = text || errorMsg;
+          }
+        } catch (__) {}
+      }
+    }
+    
+    if (errorMsg === 'AI_QUOTA_EXHAUSTED' || errorMsg.includes('AI_QUOTA_EXHAUSTED')) {
+      throw new Error('🤖 AI service is temporarily busy. Please try again shortly.');
+    }
+    throw new Error(errorMsg);
+  }
+  
+  if (data && (data.error === 'AI_QUOTA_EXHAUSTED' || data.code === 'AI_QUOTA_EXHAUSTED')) {
+    throw new Error('🤖 AI service is temporarily busy. Please try again shortly.');
+  }
+  
+  return { data, error: null };
+};
+
 export default function EditProduct() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -310,18 +354,13 @@ export default function EditProduct() {
 
       console.log("Invoking Edge Function 'analyze-image' with base64 size:", Math.round(base64Data.length / 1024) + " KB");
 
-      // Call Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('analyze-image', {
+      // Call Supabase Edge Function using helper
+      const { data } = await safeInvokeAI('analyze-image', {
         body: {
           image: base64Data,
           mimeType
         }
       });
-
-      if (error) {
-        console.error('Supabase Edge Function invocation failed:', error);
-        throw new Error(error.message || 'AI analysis failed. Please try again.');
-      }
 
       console.log("Edge Function response received:", data);
 
@@ -493,31 +532,12 @@ export default function EditProduct() {
 
     console.log(`Invoking Edge Function 'transcribe-voice' with MIME: ${mimeType}`);
 
-    const { data, error } = await supabase.functions.invoke('transcribe-voice', {
+    const { data } = await safeInvokeAI('transcribe-voice', {
       body: {
         audio: base64Data,
         mimeType
       }
     });
-
-    if (error) {
-      console.error('Supabase Edge Function transcribe-voice failed:', error);
-      let errorMsg = error.message || 'Unknown network error';
-      if (error instanceof FunctionsHttpError) {
-        try {
-          const body = await error.context.json();
-          console.error("Transcribe Voice HTTP error body:", body);
-          errorMsg = body.error || errorMsg;
-        } catch (_) {
-          try {
-            const text = await error.context.text();
-            console.error("Transcribe Voice HTTP error text:", text);
-            errorMsg = text || errorMsg;
-          } catch (__) {}
-        }
-      }
-      throw new Error(errorMsg);
-    }
 
     console.log("Transcription response received:", data);
     
@@ -577,7 +597,7 @@ export default function EditProduct() {
       }
 
       console.log("Invoking Edge Function 'price-intelligence'...");
-      const { data, error } = await supabase.functions.invoke('price-intelligence', {
+      const { data } = await safeInvokeAI('price-intelligence', {
         body: {
           productName,
           category,
@@ -587,84 +607,6 @@ export default function EditProduct() {
           similarProducts: validSimilar
         }
       });
-
-      if (error) {
-        console.error("price-intelligence invocation returned error:", error);
-        let errorMessage = error.message || "Unknown error occurred.";
-
-        // Support detailed Supabase error reporting
-        if (error instanceof FunctionsHttpError) {
-          const status = error.status;
-          let responseBody = null;
-          try {
-            responseBody = await error.context.json();
-          } catch (e) {
-            try {
-              responseBody = await error.context.text();
-            } catch (e2) {}
-          }
-          console.error("FunctionsHttpError details:", {
-            error,
-            status,
-            responseBody,
-            payload: {
-              productName,
-              category,
-              description,
-              quantity,
-              currentPrice: parseFloat(currentPrice) || null,
-              similarProductsCount: validSimilar.length
-            }
-          });
-          if (responseBody && typeof responseBody === 'object' && responseBody.error) {
-            errorMessage = responseBody.error;
-          } else if (responseBody && typeof responseBody === 'object' && responseBody.message) {
-            errorMessage = responseBody.message;
-          } else if (typeof responseBody === 'string') {
-            errorMessage = responseBody;
-          }
-        } else if (error instanceof FunctionsRelayError) {
-          console.error("FunctionsRelayError details:", {
-            error,
-            message: error.message,
-            payload: {
-              productName,
-              category,
-              description,
-              quantity,
-              currentPrice: parseFloat(currentPrice) || null,
-              similarProductsCount: validSimilar.length
-            }
-          });
-        } else if (error instanceof FunctionsFetchError) {
-          console.error("FunctionsFetchError details:", {
-            error,
-            message: error.message,
-            payload: {
-              productName,
-              category,
-              description,
-              quantity,
-              currentPrice: parseFloat(currentPrice) || null,
-              similarProductsCount: validSimilar.length
-            }
-          });
-        } else {
-          console.error("General error details:", {
-            error,
-            payload: {
-              productName,
-              category,
-              description,
-              quantity,
-              currentPrice: parseFloat(currentPrice) || null,
-              similarProductsCount: validSimilar.length
-            }
-          });
-        }
-
-        throw new Error(errorMessage);
-      }
 
       console.log("price-intelligence result:", data);
       setPriceIntelligenceResult(data);
@@ -780,7 +722,7 @@ export default function EditProduct() {
       }
 
       console.log("Invoking Edge Function 'generate-product'...");
-      const { data, error } = await supabase.functions.invoke('generate-product', {
+      const { data } = await safeInvokeAI('generate-product', {
         body: {
           image: base64Image,
           mimeType,
@@ -788,11 +730,6 @@ export default function EditProduct() {
           description: manualDesc
         }
       });
-
-      if (error) {
-        console.error('Edge Function generate-product failed:', error);
-        throw new Error(error.message || 'AI product generation failed. Please try again.');
-      }
 
       console.log("Product metadata generation response:", data);
       
@@ -986,7 +923,7 @@ export default function EditProduct() {
     let generatedData = null;
     try {
       console.log("Invoking generate-product from orchestrator...");
-      const { data, error } = await supabase.functions.invoke('generate-product', {
+      const { data } = await safeInvokeAI('generate-product', {
         body: {
           image: base64Image,
           mimeType,
@@ -994,8 +931,6 @@ export default function EditProduct() {
           description: activeDescription || null
         }
       });
-
-      if (error) throw error;
       if (!data || !data.product_name) throw new Error("Malformed metadata returned from AI model.");
       
       generatedData = data;
@@ -1185,13 +1120,18 @@ export default function EditProduct() {
       // Verify artisan profile
       const { data: artisan, error: artisanError } = await supabase
         .from('artisans')
-        .select('id')
+        .select('id, verification_status')
         .eq('profile_id', user.id)
         .maybeSingle();
 
       if (artisanError) throw artisanError;
       if (!artisan) {
         throw new Error('No artisan profile found. You must be registered as an artisan to save changes.');
+      }
+
+      const finalStatus = publishStatus || status;
+      if (finalStatus === 'published' && artisan.verification_status !== 'approved') {
+        throw new Error('⚠️ Verification Required\nYour artisan account must be verified before you can publish products.');
       }
 
       // 2. Update product row in public.products
@@ -1886,9 +1826,19 @@ export default function EditProduct() {
           <form ref={formRef} onSubmit={handleFormSubmit} className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4">
             {/* Error Notice */}
             {submitError && (
-              <div className="bg-red-100 border border-red-400 text-red-900 rounded p-4 text-sm font-semibold flex items-center gap-3">
-                <span className="text-2xl">⚠️</span>
-                <div>{submitError}</div>
+              <div className="bg-red-100 border border-red-400 text-red-900 rounded p-4 text-sm font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>{submitError}</div>
+                </div>
+                {submitError.includes('verification is required') && (
+                  <Link
+                    to="/artisan/verification"
+                    className="bg-gov-navy hover:bg-gov-navy-light text-white font-semibold text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center min-h-[32px] w-fit shadow-sm"
+                  >
+                    🛡️ Start Verification
+                  </Link>
+                )}
               </div>
             )}
 

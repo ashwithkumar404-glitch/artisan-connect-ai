@@ -27,13 +27,17 @@ export default function Products() {
       // 1. Fetch corresponding artisan profile
       const { data: artisan, error: artisanError } = await supabase
         .from('artisans')
-        .select('id')
+        .select('id, verification_status')
         .eq('profile_id', user.id)
         .maybeSingle();
 
       if (artisanError) throw artisanError;
       if (!artisan) {
         throw new Error('No artisan profile found. You must be registered as an artisan to publish products.');
+      }
+
+      if (artisan.verification_status !== 'approved') {
+        throw new Error('⚠️ Verification Required\nYour artisan account must be verified before you can publish products.');
       }
 
       // 2. Update status of this product
@@ -339,9 +343,19 @@ export default function Products() {
 
       {/* Error Notification */}
       {error && (
-        <div className="bg-red-50 border border-red-300 text-red-800 rounded p-4 text-sm font-semibold flex items-center gap-3">
-          <span className="text-2xl">⚠️</span>
-          <div>{error}</div>
+        <div className="bg-red-50 border border-red-300 text-red-800 rounded p-4 text-sm font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>{error}</div>
+          </div>
+          {error.includes('verification is required') && (
+            <Link
+              to="/artisan/verification"
+              className="bg-gov-navy hover:bg-gov-navy-light text-white font-semibold text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center min-h-[32px] w-fit shadow-sm"
+            >
+              🛡️ Start Verification
+            </Link>
+          )}
         </div>
       )}
 

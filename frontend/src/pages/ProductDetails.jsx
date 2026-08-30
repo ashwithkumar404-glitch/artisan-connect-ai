@@ -115,6 +115,7 @@ export default function ProductDetails() {
               id,
               business_name,
               location,
+              verification_status,
               profiles (
                 full_name
               )
@@ -126,8 +127,8 @@ export default function ProductDetails() {
         if (fetchError) throw fetchError;
 
         if (active) {
-          if (!data || data.status !== 'published') {
-            // Secure boundary check: do not return any draft product data to public view
+          if (!data || data.status !== 'published' || data.artisans?.verification_status !== 'approved') {
+            // Secure boundary check: do not return any draft product or unverified artisan product data
             setProduct(null);
           } else {
             setProduct(data);

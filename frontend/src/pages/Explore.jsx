@@ -54,10 +54,11 @@ export default function Explore() {
           product_images (
             image_url
           ),
-          artisans (
+          artisans!inner (
             id,
             business_name,
             location,
+            verification_status,
             profiles (
               full_name
             )
@@ -67,7 +68,8 @@ export default function Explore() {
         let query = supabase
           .from('products')
           .select(selectStr)
-          .eq('status', 'published');
+          .eq('status', 'published')
+          .eq('artisans.verification_status', 'approved');
 
         if (hasCategoryFilter) {
           query = query.eq('categories.name', selectedCategory);

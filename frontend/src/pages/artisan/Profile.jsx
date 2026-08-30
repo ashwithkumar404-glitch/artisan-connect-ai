@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import Button from '../../components/Button';
 
 export default function Profile() {
   const { user, profile, loading: authLoading, refreshProfile } = useAuth();
+  const navigate = useNavigate();
 
   // Local form states
   const [fullName, setFullName] = useState('');
@@ -50,7 +52,7 @@ export default function Profile() {
           .from('artisans')
           .select('*')
           .eq('profile_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error("Artisan fetch error:", error);
@@ -175,14 +177,14 @@ export default function Profile() {
 
         const { error: aError } = await supabase
           .from('artisans')
-          .update({
+          .upsert({
+            profile_id: user.id,
             business_name: trimmedShopName || null,
             bio: trimmedAbout || null,
             experience_years: parseInt(trimmedExperience, 10) || null,
             specialization: category,
             location: locationCombined || null
-          })
-          .eq('profile_id', user.id);
+          }, { onConflict: 'profile_id' });
 
         if (aError) throw aError;
       }
@@ -205,6 +207,9 @@ export default function Profile() {
       });
 
       setSuccessMessage('Shop Profile updated successfully!');
+      setTimeout(() => {
+        navigate('/artisan');
+      }, 1500);
     } catch (err) {
       console.error("Save profile error:", err);
       setSubmitError(err.message || 'Failed to save profile changes. Please try again.');
@@ -228,6 +233,7 @@ export default function Profile() {
             Rejected
           </span>
         );
+      case 'under_review':
       case 'under review':
       case 'reviewing':
         return (

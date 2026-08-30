@@ -1,4 +1,5 @@
-// Deno Serverless Edge Function for Artisan Connect AI Price Intelligence
+import { generateGeminiContent } from '../_shared/gemini.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -13,15 +14,8 @@ Deno.serve(async (req) => {
   console.log("Price Intelligence function started.");
 
   try {
-    // 1. Fetch Google Gemini API key from environment secrets
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!geminiKey) {
-      console.error("GEMINI_API_KEY secret is not set in Deno environment.");
-      return new Response(
-        JSON.stringify({ error: 'GEMINI_API_KEY secret is not set in the Supabase workspace.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // 1. Deno environment key checks are now managed by the shared helper.
+
 
     // 2. Parse request JSON parameters
     if (req.method !== 'POST') {
@@ -131,8 +125,6 @@ Deno.serve(async (req) => {
     });
 
     // Configure Gemini Multimodal Prompt and Payload
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-
     const promptText = `You are a pricing intelligence assistant for Artisan Connect AI, a marketplace for traditional Indian artisans.
 Analyze the following product details and the current marketplace statistics of published products in the same category to recommend a fair price (integer) in INR.
 
@@ -175,22 +167,22 @@ Do not write markdown wrappers (no \`\`\`json wrappers), no comments, and no ext
       },
     };
 
-    console.log("Gemini request started. URL:", geminiUrl.replace(geminiKey, "REDACTED_API_KEY"));
+    let resJson;
+    let fallbackTriggered = false;
 
-    // Send request to Google Gemini API
-    const response = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(apiBody),
-    });
+    try {
+      console.log("Sending request to Google Gemini API...");
+      resJson = await generateGeminiContent(apiBody);
+    } catch (err) {
+      if (err.message === 'AI_QUOTA_EXHAUSTED') {
+        console.log("Gemini rate limit detected (All fallback keys exhausted). Using marketplace statistics fallback.");
+        fallbackTriggered = true;
+      } else {
+        throw err;
+      }
+    }
 
-    console.log("Gemini response status:", response.status);
-
-    if (response.status === 429) {
-      console.log("Gemini rate limit detected (429). Using marketplace statistics fallback.");
-      
+    if (fallbackTriggered) {
       let fallbackPrice = market_median !== undefined && market_median !== null ? market_median : market_average;
       fallbackPrice = Math.round(fallbackPrice);
       if (fallbackPrice < market_min) fallbackPrice = market_min;
@@ -225,13 +217,6 @@ Do not write markdown wrappers (no \`\`\`json wrappers), no comments, and no ext
       );
     }
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini API error body received:", errText);
-      throw new Error(`Gemini API returned error ${response.status}: ${errText}`);
-    }
-
-    const resJson = await response.json();
     const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textResult) {

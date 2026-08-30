@@ -1,4 +1,5 @@
-// Deno Serverless Edge Function for Artisan Connect AI Product Image Analysis
+import { generateGeminiContent } from '../_shared/gemini.ts';
+
 // Access-Control CORS headers for cross-origin resource requests
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,15 +15,7 @@ Deno.serve(async (req) => {
   try {
     console.log("Edge Function 'analyze-image' invocation started.");
     
-    // 1. Fetch Google Gemini API key from environment vault
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!geminiKey) {
-      console.error("GEMINI_API_KEY secret is not set in Deno environment.");
-      return new Response(
-        JSON.stringify({ error: 'GEMINI_API_KEY secret is not set in the Supabase workspace.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // 1. Deno environment key checks are now managed by the shared helper.
 
     // 2. Parse request JSON parameters
     const { image, mimeType } = await req.json();
@@ -38,7 +31,7 @@ Deno.serve(async (req) => {
     console.log("Image payload base64 size (approx):", Math.round(image.length / 1024) + " KB");
 
     // 3. Configure Gemini Multimodal Prompt and Payload
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+
 
     const promptText = `Analyze the attached product image. Assess the image quality, blur, lighting, background, product positioning, and visibility. 
 You must output a valid JSON object containing your actual audit findings for this specific image.
@@ -76,26 +69,10 @@ Do not include any markdown formatting (no \`\`\`json wrappers), no comments, an
       },
     };
 
-    console.log("Sending request to Google Gemini API using model 'gemini-2.5-flash'...");
+    console.log("Sending request to Google Gemini API...");
 
-    // 4. Send request to Google Gemini API
-    const response = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(apiBody),
-    });
-
-    console.log("Gemini API response status received:", response.status);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini API error text:", errText);
-      throw new Error(`Gemini API returned error ${response.status}: ${errText}`);
-    }
-
-    const resJson = await response.json();
+    // 4. Send request using shared helper
+    const resJson = await generateGeminiContent(apiBody);
     const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textResult) {
@@ -115,6 +92,15 @@ Do not include any markdown formatting (no \`\`\`json wrappers), no comments, an
     );
   } catch (error) {
     console.error('Error in analyze-image function:', error);
+    if (error.message === 'AI_QUOTA_EXHAUSTED') {
+      return new Response(
+        JSON.stringify({
+          code: 'AI_QUOTA_EXHAUSTED',
+          message: 'AI service is temporarily unavailable. Please try again shortly.'
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

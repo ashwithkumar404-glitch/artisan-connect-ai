@@ -4,6 +4,7 @@ import Button from '../components/Button';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Login() {
+  console.log('Login component rendering!');
   const location = useLocation();
   const [email, setEmail] = useState(location.state?.email || '');
   const [password, setPassword] = useState('');
