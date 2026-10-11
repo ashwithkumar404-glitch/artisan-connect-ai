@@ -14,6 +14,8 @@ import About from './pages/About';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import BuyerProfile from './pages/BuyerProfile';
+import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
 
 // Artisan Pages
 import ArtisanDashboard from './pages/artisan/Dashboard';
@@ -23,6 +25,7 @@ import EditProduct from './pages/artisan/EditProduct';
 import Enquiries from './pages/artisan/Enquiries';
 import Profile from './pages/artisan/Profile';
 import Verification from './pages/artisan/Verification';
+import ConversationalAssistant from './pages/artisan/ConversationalAssistant';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/Dashboard';
@@ -60,6 +63,8 @@ export default function App() {
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
           <Route path="profile" element={<BuyerProfile />} />
+          <Route path="cart" element={<Cart />} />
+          <Route path="checkout" element={<Checkout />} />
         </Route>
 
         {/* Artisan Routes */}
@@ -72,7 +77,11 @@ export default function App() {
           <Route path="enquiries" element={<Enquiries />} />
           <Route path="profile" element={<Profile />} />
           <Route path="verification" element={<Verification />} />
+          <Route path="assistant" element={<ConversationalAssistant />} />
         </Route>
+
+        {/* Standalone Mobile-first Conversational Assistant */}
+        <Route path="/assistant" element={<ConversationalAssistant />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>

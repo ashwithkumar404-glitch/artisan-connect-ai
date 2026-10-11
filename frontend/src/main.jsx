@@ -7,11 +7,14 @@ import { testSupabaseConnection } from './lib/supabaseTest'
 testSupabaseConnection()
 
 import { AuthProvider } from './lib/AuthContext'
+import { CartProvider } from './lib/CartContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <CartProvider>
+        <App />
+      </CartProvider>
     </AuthProvider>
   </StrictMode>,
 )

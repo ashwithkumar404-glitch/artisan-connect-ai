@@ -2,21 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import { useCart } from '../lib/CartContext';
+import { createNotification } from '../lib/notifications';
 
 export default function ProductDetails() {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { addToCart } = useCart();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Cart operations
+  const [quantity, setQuantity] = useState(1);
+  const [cartSuccess, setCartSuccess] = useState(false);
+
+  // Reviews state
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+
   // Enquiry modal and submission states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
   const [enquiryMessage, setEnquiryMessage] = useState('');
+  const [enquiryQty, setEnquiryQty] = useState('');
+  const [enquiryDate, setEnquiryDate] = useState('');
+  const [enquiryBudget, setEnquiryBudget] = useState('');
+  const [enquiryRefImage, setEnquiryRefImage] = useState(null);
+  const [enquiryUploading, setEnquiryUploading] = useState(false);
   const [isSendingEnquiry, setIsSendingEnquiry] = useState(false);
   const [enquirySuccess, setEnquirySuccess] = useState(false);
   const [enquiryError, setEnquiryError] = useState('');
@@ -63,6 +79,26 @@ export default function ProductDetails() {
         throw new Error('Unable to contact the artisan because this product is missing its artisan information.');
       }
 
+      let referenceImageUrl = null;
+      if (enquiryRefImage) {
+        setEnquiryUploading(true);
+        const fileExt = enquiryRefImage.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `enquiries/${user.id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('review-photos')
+          .upload(filePath, enquiryRefImage);
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('review-photos')
+          .getPublicUrl(filePath);
+
+        referenceImageUrl = publicUrlData?.publicUrl;
+      }
+
       const { error: insertError } = await supabase
         .from('enquiries')
         .insert({
@@ -70,19 +106,48 @@ export default function ProductDetails() {
           customer_id: user.id,
           artisan_id: product.artisan_id,
           message: enquiryMessage.trim(),
-          status: 'pending'
+          quantity: enquiryQty ? parseInt(enquiryQty) : null,
+          preferred_delivery_date: enquiryDate || null,
+          budget: enquiryBudget ? parseFloat(enquiryBudget) : null,
+          reference_image_url: referenceImageUrl,
+          status: 'submitted'
         });
 
       if (insertError) throw insertError;
 
+      // Notify admins
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'admin');
+
+      if (admins && admins.length > 0) {
+        const promises = admins.map(admin =>
+          createNotification(
+            admin.id,
+            'enquiry_submitted',
+            'New Enquiry Received',
+            `A customer submitted a custom design request for "${product.name}".`,
+            product.id,
+            'enquiry'
+          )
+        );
+        await Promise.all(promises);
+      }
+
       setEnquirySuccess(true);
       setIsEnquiryModalOpen(false);
       setEnquiryMessage('');
+      setEnquiryQty('');
+      setEnquiryDate('');
+      setEnquiryBudget('');
+      setEnquiryRefImage(null);
     } catch (err) {
       console.error('Error submitting enquiry:', err);
       setEnquiryError(err.message || 'Failed to submit enquiry.');
     } finally {
       setIsSendingEnquiry(false);
+      setEnquiryUploading(false);
     }
   };
 
@@ -148,6 +213,50 @@ export default function ProductDetails() {
 
     if (id) {
       loadProductDetails();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadReviews() {
+      try {
+        setLoadingReviews(true);
+        const { data, error: reviewsErr } = await supabase
+          .from('product_reviews')
+          .select(`
+            id,
+            rating,
+            review_text,
+            photo_url,
+            created_at,
+            profiles (
+              full_name
+            )
+          `)
+          .eq('product_id', id)
+          .order('created_at', { ascending: false });
+
+        if (reviewsErr) throw reviewsErr;
+
+        if (active) {
+          setReviews(data || []);
+        }
+      } catch (err) {
+        console.error('Error fetching product reviews:', err);
+      } finally {
+        if (active) {
+          setLoadingReviews(false);
+        }
+      }
+    }
+
+    if (id) {
+      loadReviews();
     }
 
     return () => {
@@ -311,19 +420,89 @@ export default function ProductDetails() {
             </div>
           </div>
 
-          {/* Action button */}
-          <div className="space-y-3">
+          {/* Action buttons */}
+          <div className="space-y-4 pt-4 border-t border-slate-200">
+            {/* Quantity Selector */}
+            {product.stock_quantity > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-700">Quantity</span>
+                <div className="flex items-center border border-slate-350 rounded overflow-hidden bg-slate-50 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold text-base min-h-[40px]"
+                    aria-label="Decrease quantity"
+                  >
+                    －
+                  </button>
+                  <span className="px-4 text-sm font-bold text-slate-800 bg-white min-w-[38px] text-center py-1.5 select-none">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(q => Math.min(product.stock_quantity ?? 0, q + 1))}
+                    disabled={quantity >= (product.stock_quantity ?? 0)}
+                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold text-base min-h-[40px] disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Increase quantity"
+                  >
+                    ＋
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {cartSuccess && (
+              <div className="bg-green-50 border border-green-200 text-green-800 rounded p-2.5 text-xs font-semibold text-center animate-fade-in flex items-center justify-center gap-1.5">
+                <span>🛒</span> Added to cart successfully! <Link to="/cart" className="underline font-bold">View Cart</Link>
+              </div>
+            )}
+
             {enquiryError && !isEnquiryModalOpen && (
               <div className="bg-red-55 border border-red-200 text-red-850 rounded p-3 text-xs font-semibold animate-fade-in">
                 ⚠️ {enquiryError}
               </div>
             )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!user) {
+                    setIsLoginModalOpen(true);
+                    return;
+                  }
+                  addToCart(product, quantity);
+                  setCartSuccess(true);
+                  setTimeout(() => setCartSuccess(false), 4000);
+                }}
+                disabled={product.stock_quantity === 0}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-3 px-5 rounded transition-all text-sm shadow-sm min-h-[44px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Add to Cart
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!user) {
+                    setIsLoginModalOpen(true);
+                    return;
+                  }
+                  addToCart(product, quantity);
+                  navigate('/checkout');
+                }}
+                disabled={product.stock_quantity === 0}
+                className="w-full bg-gov-navy hover:bg-gov-navy-light text-white font-extrabold py-3 px-5 rounded transition-all text-sm shadow-sm min-h-[44px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Buy Now
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={handleEnquiryClick}
-              className="w-full bg-gov-saffron hover:bg-gov-saffron-light text-white font-extrabold py-3.5 px-6 rounded transition-colors text-base shadow-sm min-h-[48px] cursor-pointer"
+              className="w-full bg-white hover:bg-slate-50 text-gov-navy border border-gov-navy font-bold py-3 px-5 rounded transition-colors text-sm min-h-[44px] cursor-pointer flex items-center justify-center gap-2"
             >
-              Send Enquiry to Artisan
+              <span>✉️</span> Custom Design / Bulk Enquiry
             </button>
           </div>
         </div>
@@ -377,6 +556,10 @@ export default function ProductDetails() {
                 onClick={() => {
                   setIsEnquiryModalOpen(false);
                   setEnquiryMessage('');
+                  setEnquiryQty('');
+                  setEnquiryDate('');
+                  setEnquiryBudget('');
+                  setEnquiryRefImage(null);
                   setEnquiryError('');
                 }}
                 className="text-slate-400 hover:text-slate-655 font-bold text-lg cursor-pointer px-1"
@@ -391,9 +574,9 @@ export default function ProductDetails() {
               </div>
             )}
 
-            <form onSubmit={handleEnquirySubmit} className="space-y-4">
+            <form onSubmit={handleEnquirySubmit} className="space-y-3.5">
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                   Product
                 </label>
                 <input
@@ -404,19 +587,81 @@ export default function ProductDetails() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label htmlFor="enquiry-qty" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Quantity Needed
+                  </label>
+                  <input
+                    id="enquiry-qty"
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 50"
+                    disabled={isSendingEnquiry}
+                    value={enquiryQty}
+                    onChange={(e) => setEnquiryQty(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-350 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="enquiry-budget" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Total Budget (₹)
+                  </label>
+                  <input
+                    id="enquiry-budget"
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 15000"
+                    disabled={isSendingEnquiry}
+                    value={enquiryBudget}
+                    onChange={(e) => setEnquiryBudget(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-355 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label htmlFor="enquiry-date" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Preferred Date
+                  </label>
+                  <input
+                    id="enquiry-date"
+                    type="date"
+                    disabled={isSendingEnquiry}
+                    value={enquiryDate}
+                    onChange={(e) => setEnquiryDate(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-355 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy text-slate-700"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="enquiry-image" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Reference Design File
+                  </label>
+                  <input
+                    id="enquiry-image"
+                    type="file"
+                    accept="image/*"
+                    disabled={isSendingEnquiry || enquiryUploading}
+                    onChange={(e) => setEnquiryRefImage(e.target.files[0])}
+                    className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1">
-                <label htmlFor="enquiry-msg" className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Message
+                <label htmlFor="enquiry-msg" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Enquiry Message
                 </label>
                 <textarea
                   id="enquiry-msg"
-                  rows="4"
+                  rows="3"
                   required
                   disabled={isSendingEnquiry}
                   placeholder="Ask about product details, customized orders, or shipping timelines..."
                   value={enquiryMessage}
                   onChange={(e) => setEnquiryMessage(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-350 rounded text-sm focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                  className="w-full px-3 py-2 border border-slate-355 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
                 ></textarea>
               </div>
 
@@ -426,25 +671,97 @@ export default function ProductDetails() {
                   onClick={() => {
                     setIsEnquiryModalOpen(false);
                     setEnquiryMessage('');
+                    setEnquiryQty('');
+                    setEnquiryDate('');
+                    setEnquiryBudget('');
+                    setEnquiryRefImage(null);
                     setEnquiryError('');
                   }}
-                  disabled={isSendingEnquiry}
-                  className="bg-white hover:bg-slate-55 border border-slate-300 text-slate-750 text-sm font-bold px-4 py-2 rounded min-h-[40px] cursor-pointer"
+                  disabled={isSendingEnquiry || enquiryUploading}
+                  className="bg-white hover:bg-slate-55 border border-slate-300 text-slate-750 text-xs font-bold px-4 py-2 rounded min-h-[38px] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSendingEnquiry}
-                  className="bg-gov-saffron hover:bg-gov-saffron-light text-white text-sm font-bold px-5 py-2 rounded min-h-[40px] cursor-pointer shadow-sm disabled:opacity-50"
+                  disabled={isSendingEnquiry || enquiryUploading}
+                  className="bg-gov-saffron hover:bg-gov-saffron-light text-white text-xs font-bold px-5 py-2 rounded min-h-[38px] cursor-pointer shadow-sm disabled:opacity-50"
                 >
-                  {isSendingEnquiry ? 'Sending...' : 'Send Enquiry'}
+                  {isSendingEnquiry || enquiryUploading ? 'Sending...' : 'Send Enquiry'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Reviews and Ratings Section */}
+      <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-sm space-y-6">
+        <h3 className="text-xl font-bold text-gov-navy m-0 flex items-center gap-2">
+          <span>⭐️</span> Customer Reviews ({reviews.length})
+        </h3>
+
+        {loadingReviews ? (
+          <div className="flex items-center gap-2 text-slate-550 text-sm">
+            <div className="w-5 h-5 border-2 border-gov-navy border-t-transparent rounded-full animate-spin"></div>
+            <span>Loading reviews...</span>
+          </div>
+        ) : reviews.length === 0 ? (
+          <p className="text-sm text-slate-500 m-0 font-sans">No reviews have been written for this handicraft yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Reviews Summary Stats */}
+            <div className="bg-slate-55 border border-slate-200 rounded-lg p-5 h-fit text-center space-y-3">
+              <div className="text-4xl font-extrabold text-slate-900">
+                {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+              </div>
+              <div className="text-amber-500 font-bold text-lg select-none">
+                {'★'.repeat(Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)) + '☆'.repeat(5 - Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length))}
+              </div>
+              <p className="text-[10px] text-slate-450 uppercase font-bold tracking-wider m-0">Average Rating</p>
+            </div>
+
+            {/* Individual Reviews List */}
+            <div className="md:col-span-2 space-y-4 divide-y divide-slate-150 max-h-[400px] overflow-y-auto pr-2">
+              {reviews.map((rev, index) => (
+                <div key={rev.id} className={`${index > 0 ? 'pt-4' : ''} space-y-2`}>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-sm text-slate-800 block">
+                        {rev.profiles?.full_name || 'Verified Customer'}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(rev.created_at).toLocaleDateString('en-IN', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                    <div className="text-amber-500 font-bold text-sm select-none">
+                      {'★'.repeat(rev.rating) + '☆'.repeat(5 - rev.rating)}
+                    </div>
+                  </div>
+
+                  {rev.review_text && (
+                    <p className="text-xs text-slate-655 leading-relaxed m-0 font-sans">
+                      {rev.review_text}
+                    </p>
+                  )}
+
+                  {rev.photo_url && (
+                    <img
+                      src={rev.photo_url}
+                      alt="Review snapshot"
+                      className="w-24 h-24 object-cover rounded border border-slate-200 mt-1 cursor-pointer hover:opacity-90 transition-opacity"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

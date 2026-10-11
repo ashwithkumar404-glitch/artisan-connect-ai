@@ -11,6 +11,7 @@ export default function ArtisanLayout() {
 
   const menuItems = [
     { to: '/artisan/dashboard', label: 'Dashboard', icon: '📊' },
+    { to: '/artisan/assistant', label: 'AI Chat Assistant', icon: '💬' },
     { to: '/artisan/products', label: 'My Products', icon: '📦' },
     { to: '/artisan/products/new', label: 'Add Product', icon: '➕' },
     { to: '/artisan/enquiries', label: 'Enquiries', icon: '✉️' },

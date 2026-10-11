@@ -136,15 +136,25 @@ export default function NotificationBell({ light = false }) {
     }
 
     // Navigate based on type
-    if (notification.reference_id) {
-      if (notification.type === 'verification_submitted') {
-        navigate(`/admin/verifications/${notification.reference_id}`);
-      } else if (
-        notification.type === 'verification_approved' ||
-        notification.type === 'verification_rejected'
-      ) {
-        navigate('/artisan/verification');
-      }
+    if (notification.type === 'verification_submitted' && notification.reference_id) {
+      navigate(`/admin/verifications/${notification.reference_id}`);
+    } else if (
+      notification.type === 'verification_approved' ||
+      notification.type === 'verification_rejected'
+    ) {
+      navigate('/artisan/verification');
+    } else if (
+      notification.type === 'order_status_changed' ||
+      notification.type === 'artisan_responded'
+    ) {
+      navigate('/profile'); // Customer Dashboard
+    } else if (notification.type === 'enquiry_forwarded') {
+      navigate('/artisan/enquiries'); // Artisan Enquiries Log
+    } else if (
+      notification.type === 'enquiry_submitted' ||
+      notification.type === 'order_placed'
+    ) {
+      navigate('/admin/dashboard'); // Admin Dashboard
     }
   };
 
