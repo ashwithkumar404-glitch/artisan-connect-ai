@@ -11,6 +11,23 @@ const formatTime = (seconds) => {
   return `${mins < 10 ? '0' + mins : mins}:${secs < 10 ? '0' + secs : secs}`;
 };
 
+const normalizeKeywords = (keywords) => {
+  if (!keywords) return [];
+  if (Array.isArray(keywords)) {
+    return keywords
+      .flatMap((k) => (typeof k === 'string' ? k.split(',') : String(k || '')))
+      .map((k) => (typeof k === 'string' ? k.trim().replace(/^#+/, '') : ''))
+      .filter(Boolean);
+  }
+  if (typeof keywords === 'string') {
+    return keywords
+      .split(',')
+      .map((k) => k.trim().replace(/^#+/, ''))
+      .filter(Boolean);
+  }
+  return [];
+};
+
 const safeInvokeAI = async (functionName, options) => {
   const { data, error } = await supabase.functions.invoke(functionName, options);
   
@@ -109,6 +126,7 @@ export default function NewProduct() {
 
   // Pipeline state variables
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+  // Pipeline step tracking retained for UI progress indicators
   const [pipelineStep, setPipelineStep] = useState('idle');
   const [pipelineProgress, setPipelineProgress] = useState({
     image: 'pending',
@@ -575,7 +593,10 @@ export default function NewProduct() {
 
       // Auto-populate the actual form fields immediately after successful generation
       if (data.product_name) {
-        setName(data.product_name);
+        // Limit title to max 6 words for concise product name
+        const words = data.product_name.split(/\s+/);
+        const shortTitle = words.length > 6 ? words.slice(0, 6).join(' ') + '...' : data.product_name;
+        setName(shortTitle);
       }
 
       let matchedCategoryId = null;
@@ -642,6 +663,7 @@ export default function NewProduct() {
         }
       }
 
+      setShowAiReview(true);
     } catch (err) {
       console.error('AI Product Generator error:', err);
       setGenerateProductError(err.message || 'AI product generation failed. Please try again.');
@@ -831,45 +853,6 @@ export default function NewProduct() {
     }
   };
 
-  const handleApplyAiDetails = () => {
-    if (!generatedProductResult) return;
-
-    if (generatedProductResult.product_name) {
-      setName(generatedProductResult.product_name);
-    }
-
-    if (generatedProductResult.category && categoriesList.length > 0) {
-      const foundCategory = categoriesList.find(
-        cat => cat.name.toLowerCase() === generatedProductResult.category.toLowerCase()
-      );
-      if (foundCategory) {
-        setSelectedCategoryId(foundCategory.id);
-      }
-    }
-
-    if (generatedProductResult.description) {
-      setDescription(generatedProductResult.description);
-    }
-
-    if (generatedProductResult.price_suggestion) {
-      if (!isPriceManuallyEdited) {
-        const { min, max } = generatedProductResult.price_suggestion;
-        const midPrice = Math.round((min + max) / 2);
-        setPrice(midPrice.toString());
-      }
-    }
-
-    if (generatedProductResult.quantity !== undefined && generatedProductResult.quantity !== null) {
-      setStockQuantity(generatedProductResult.quantity.toString());
-    } else {
-      setStockQuantity('');
-    }
-
-    setApplyDetailsSuccess('AI-generated details have been re-applied. You can edit them.');
-    setTimeout(() => setApplyDetailsSuccess(''), 5000);
-    console.log("AI details successfully applied to the form fields.");
-  };
-
   const handleApplyRecommendedPrice = () => {
     let recommended = null;
     if (priceIntelligenceResult) {
@@ -877,6 +860,8 @@ export default function NewProduct() {
         recommended = priceIntelligenceResult.recommendation.recommended_price;
       } else if (priceIntelligenceResult.recommended_price !== undefined && priceIntelligenceResult.recommended_price !== null) {
         recommended = priceIntelligenceResult.recommended_price;
+      } else if (priceIntelligenceResult.suggested_price !== undefined && priceIntelligenceResult.suggested_price !== null) {
+        recommended = priceIntelligenceResult.suggested_price;
       }
     }
 
@@ -890,14 +875,6 @@ export default function NewProduct() {
     } else {
       setPriceIntelligenceError('Suggested price is null or invalid. Cannot apply.');
     }
-  };
-
-  const handleUseSuggestedPrice = () => {
-    if (!generatedProductResult || !generatedProductResult.price_suggestion) return;
-    const { min, max } = generatedProductResult.price_suggestion;
-    const midPrice = Math.round((min + max) / 2);
-    setPrice(midPrice.toString());
-    console.log(`Suggested price set to midpoint: ₹${midPrice}`);
   };
 
   const handleFormSubmit = async (e, publishStatus = 'draft') => {
@@ -921,7 +898,8 @@ export default function NewProduct() {
         return;
       }
       
-      const parsedPrice = parseFloat(price);
+      const cleanedPrice = String(price).replace(/[^\d.]/g, '');
+      const parsedPrice = parseFloat(cleanedPrice);
       if (isNaN(parsedPrice) || parsedPrice < 0) {
         setSubmitError('Price must be a valid positive number.');
         setIsSubmitting(false);
@@ -1163,6 +1141,10 @@ export default function NewProduct() {
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 border border-slate-350 rounded-lg text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy bg-white"
             ></textarea>
+            {/* Show transcription result if available */}
+            {transcribeResult?.transcript && (
+              <p className="mt-1 text-xs text-slate-500 italic">Transcribed: {transcribeResult.transcript}</p>
+            )}
 
             {/* Voice record controls */}
             <div className="border-t border-slate-100 pt-3">
@@ -1454,18 +1436,21 @@ export default function NewProduct() {
                   </div>
                 </div>
 
-                {generatedProductResult.keywords && generatedProductResult.keywords.length > 0 && (
-                  <div>
-                    <span className="text-slate-450 font-bold uppercase tracking-wider text-[9px] block">Keywords</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                      {generatedProductResult.keywords.map((k, i) => (
-                        <span key={i} className="bg-slate-850 text-slate-350 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-800">
-                          #{k}
-                        </span>
-                      ))}
+                {(() => {
+                  const normalizedKeywords = normalizeKeywords(generatedProductResult.keywords);
+                  return normalizedKeywords.length > 0 ? (
+                    <div>
+                      <span className="text-slate-450 font-bold uppercase tracking-wider text-[9px] block">Keywords</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {normalizedKeywords.map((k, i) => (
+                          <span key={i} className="bg-slate-850 text-slate-350 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-800">
+                            #{k}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : null;
+                })()}
               </div>
             </div>
 
@@ -1474,60 +1459,74 @@ export default function NewProduct() {
               <div className="mt-6 pt-5 border-t border-slate-800">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-400 block mb-3">💰 AI Price Intelligence</span>
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-850/80">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center py-1 border-b border-slate-900">
-                        <span className="text-slate-400 font-medium">Market Range:</span>
-                        <span className="font-bold text-white">
-                          ₹{priceIntelligenceResult.market_min} — ₹{priceIntelligenceResult.market_max}
-                        </span>
+                  {Number(priceIntelligenceResult.comparable_products_count) > 0 ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center py-1 border-b border-slate-900">
+                            <span className="text-slate-400 font-medium">Market Range:</span>
+                            <span className="font-bold text-white">
+                              ₹{priceIntelligenceResult.market_min} — ₹{priceIntelligenceResult.market_max}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-1 border-b border-slate-900">
+                            <span className="text-slate-400 font-medium">Average / Median:</span>
+                            <span className="font-semibold text-slate-200">
+                              ₹{priceIntelligenceResult.market_average} / ₹{priceIntelligenceResult.market_median}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-900/60 p-3 rounded border border-slate-850 flex flex-col justify-between">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] font-bold text-indigo-400">Recommended Price:</span>
+                            <span className={`px-1.5 py-0.25 rounded text-[8px] font-extrabold uppercase ${
+                              priceIntelligenceResult.confidence === 'high' ? 'bg-green-950 text-green-400 border border-green-800' :
+                              priceIntelligenceResult.confidence === 'medium' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                              'bg-red-950 text-red-400 border border-red-800'
+                            }`}>
+                              {priceIntelligenceResult.confidence}
+                            </span>
+                          </div>
+                          <span className="text-white font-extrabold text-xl block">
+                            ₹{priceIntelligenceResult.recommendation?.recommended_price || priceIntelligenceResult.recommended_price || 'N/A'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center py-1 border-b border-slate-900">
-                        <span className="text-slate-400 font-medium">Average / Median:</span>
-                        <span className="font-semibold text-slate-200">
-                          ₹{priceIntelligenceResult.market_average} / ₹{priceIntelligenceResult.market_median}
-                        </span>
+
+                      {/* Fallback support or standard reasoning */}
+                      {(priceIntelligenceResult.recommendation?.reasoning || priceIntelligenceResult.reasoning) && (
+                        <p className="text-[10.5px] text-slate-450 leading-normal italic font-medium pt-3 mt-3 border-t border-slate-900">
+                          "{priceIntelligenceResult.recommendation?.reasoning || priceIntelligenceResult.reasoning}"
+                        </p>
+                      )}
+
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleApplyRecommendedPrice}
+                          className="bg-indigo-650 hover:bg-indigo-755 text-white font-bold py-1.5 px-3 rounded text-[11px] transition-colors cursor-pointer"
+                        >
+                          Use Recommended Price
+                        </button>
+                        {applyPriceSuccess && (
+                          <span className="text-[10px] text-green-400 font-bold self-center animate-pulse">
+                            {applyPriceSuccess}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-3 bg-amber-950/30 border border-amber-900/60 rounded-lg text-amber-300 text-xs flex items-start gap-2.5">
+                      <span className="text-base leading-none">⚠️</span>
+                      <div className="space-y-1">
+                        <span className="font-bold text-amber-200 block">No comparable products found</span>
+                        <p className="text-[11px] text-slate-300 leading-relaxed m-0">
+                          {priceIntelligenceResult.warning || "There are no published products in this category yet to analyze market pricing. Please enter your product price manually."}
+                        </p>
                       </div>
                     </div>
-
-                    <div className="bg-slate-900/60 p-3 rounded border border-slate-850 flex flex-col justify-between">
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="text-[10px] font-bold text-indigo-400">Recommended Price:</span>
-                        <span className={`px-1.5 py-0.25 rounded text-[8px] font-extrabold uppercase ${
-                          priceIntelligenceResult.confidence === 'high' ? 'bg-green-950 text-green-400 border border-green-800' :
-                          priceIntelligenceResult.confidence === 'medium' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
-                          'bg-red-950 text-red-400 border border-red-800'
-                        }`}>
-                          {priceIntelligenceResult.confidence}
-                        </span>
-                      </div>
-                      <span className="text-white font-extrabold text-xl block">
-                        ₹{priceIntelligenceResult.recommendation?.recommended_price || priceIntelligenceResult.recommended_price || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Fallback support or standard reasoning */}
-                  {(priceIntelligenceResult.recommendation?.reasoning || priceIntelligenceResult.reasoning) && (
-                    <p className="text-[10.5px] text-slate-450 leading-normal italic font-medium pt-3 mt-3 border-t border-slate-900">
-                      "{priceIntelligenceResult.recommendation?.reasoning || priceIntelligenceResult.reasoning}"
-                    </p>
                   )}
-
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleApplyRecommendedPrice}
-                      className="bg-indigo-650 hover:bg-indigo-755 text-white font-bold py-1.5 px-3 rounded text-[11px] transition-colors cursor-pointer"
-                    >
-                      Use Recommended Price
-                    </button>
-                    {applyPriceSuccess && (
-                      <span className="text-[10px] text-green-400 font-bold self-center animate-pulse">
-                        {applyPriceSuccess}
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
             )}
@@ -2137,90 +2136,10 @@ export default function NewProduct() {
               </div>
             )}
 
-            {generatedProductResult && (
-              <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-4 animate-fade-in text-xs">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <h4 className="font-bold text-slate-800 text-sm m-0">✨ AI Generated Details</h4>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize ${
-                    generatedProductResult.confidence === 'high' ? 'bg-green-100 text-green-800' :
-                    generatedProductResult.confidence === 'medium' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {generatedProductResult.confidence} Confidence
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Product Name:</span>
-                    <span className="font-bold text-slate-800 mt-0.5 block">{generatedProductResult.product_name}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Category:</span>
-                    <span className="font-semibold text-slate-700 mt-0.5 block">{generatedProductResult.category}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Description:</span>
-                    <p className="text-slate-655 mt-0.5 leading-normal max-h-24 overflow-y-auto bg-white p-2 border border-slate-200 rounded">
-                      {generatedProductResult.description}
-                    </p>
-                  </div>
-
-                  {generatedProductResult.materials && generatedProductResult.materials.length > 0 && (
-                    <div>
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Materials:</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {generatedProductResult.materials.map((m, i) => (
-                          <span key={i} className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold">{m}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {generatedProductResult.keywords && generatedProductResult.keywords.length > 0 && (
-                    <div>
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Search Keywords:</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {generatedProductResult.keywords.map((k, i) => (
-                          <span key={i} className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold">#{k}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {generatedProductResult.price_suggestion && (
-                    <div className="bg-white border border-slate-200 rounded p-3 space-y-1.5">
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">AI Suggested Price Range</span>
-                      <div className="text-base font-black text-gov-navy">
-                        ₹{generatedProductResult.price_suggestion.min} – ₹{generatedProductResult.price_suggestion.max}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleUseSuggestedPrice}
-                        className="bg-gov-navy hover:bg-gov-navy-light text-white text-[10px] font-bold px-2 py-1 rounded transition-colors cursor-pointer"
-                      >
-                        Use Suggested Price (Midpoint: ₹{Math.round((generatedProductResult.price_suggestion.min + generatedProductResult.price_suggestion.max) / 2)})
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="pt-2 border-t border-slate-200 flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={handleApplyAiDetails}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded text-xs transition-colors cursor-pointer shadow-sm min-h-[34px]"
-                    >
-                      Apply AI Details
-                    </button>
-                    {applyDetailsSuccess && (
-                      <p className="text-[10px] text-green-600 font-bold text-center">
-                        ✓ {applyDetailsSuccess}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+            {applyDetailsSuccess && (
+              <p className="text-[11px] text-green-700 font-bold text-center mt-1 animate-fade-in">
+                ✓ {applyDetailsSuccess}
+              </p>
             )}
           </div>
         </div>

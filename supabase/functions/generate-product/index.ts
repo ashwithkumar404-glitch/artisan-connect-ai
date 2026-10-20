@@ -1,4 +1,6 @@
-import { generateGeminiContent } from '../_shared/gemini.ts';
+// generate-product function - deterministic implementation without Gemini
+
+import { classifyCategory } from './classifier.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,10 +14,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Deno environment key checks are now managed by the shared helper.
-
-
-    // 2. Parse request JSON parameters
+    // Parse request JSON parameters
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Only POST requests are supported.' }),
@@ -37,115 +36,66 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log("Input attributes received:");
-    console.log("- Image present:", !!image);
-    if (image) console.log("  - Image MIME type:", mimeType);
-    console.log("- Voice text present:", !!voiceText);
-    console.log("- Existing description present:", !!existingDescription);
+    console.log('Input attributes received:');
+    console.log('- Image present:', !!image);
+    if (image) console.log('  - Image MIME type:', mimeType);
+    console.log('- Voice text present:', !!voiceText);
+    console.log('- Existing description present:', !!existingDescription);
 
-    // 3. Configure Gemini Multimodal Prompt and Payload
-    const promptText = `You are a product cataloguing assistant for Artisan Connect AI, a marketplace for traditional Indian artisans.
-Analyze the provided product information (which may include a product photo, an audio transcript, and/or a manually typed description) and generate high-quality product cataloguing metadata.
+    // Deterministic product metadata generation (Gemini removed)
+    const combinedText = [voiceText, existingDescription].filter(Boolean).join(' ').trim();
 
-You must output a valid JSON object matching the following structure:
-{
-  "product_name": <string: descriptive, clean title describing the product>,
-  "category": <string: exactly one of the valid categories below>,
-  "description": <string: detailed, clear, and professional English product description outlining craftsmanship, material, utility, and style>,
-  "keywords": [
-    <array of 5 to 10 search-relevant tag strings based on the product characteristics>
-  ],
-  "price_suggestion": {
-    "min": <integer: estimated minimum price in INR ₹ based on materials, complexity, and product type>,
-    "max": <integer: estimated maximum price in INR ₹>,
-    "currency": "INR"
-  },
-  "confidence": "high" | "medium" | "low",
-  "quantity": <integer or null: the exact quantity if the user/artisan explicitly mentioned a quantity as a number, otherwise null. Do NOT guess, assume, or invent quantity under any circumstances. Only populate if explicitly mentioned in the transcription or description. For example, "I made 10 baskets" -> 10, "this is a basket" -> null.>
-}
-
-The category field MUST be exactly one of:
-- "Bamboo & Natural Craft"
-- "Handloom & Textiles"
-- "Pottery"
-- "Wood Craft"
-- "Metal Craft"
-- "Jewellery"
-- "Other Handicrafts"
-
-The price suggestion is an estimate. If the information provided is insufficient to estimate a price range, return a conservative range (e.g. min: 100, max: 500) and set the confidence to "low".
-
-Do not write markdown format (no \`\`\`json wrappers), no comment lines, and no extra text outside the JSON object. All values must be derived dynamically from the supplied image and text parts.`;
-
-    const parts = [{ text: promptText }];
-
-    if (voiceText) {
-      parts.push({ text: `Voice recording transcription details: "${voiceText}"` });
-    }
-
-    if (existingDescription) {
-      parts.push({ text: `Manually entered existing description: "${existingDescription}"` });
-    }
-
-    if (image && mimeType) {
-      parts.push({
-        inlineData: {
-          mimeType: mimeType || 'image/jpeg',
-          data: image,
-        }
-      });
-    }
-
-    const apiBody = {
-      contents: [
-        {
-          parts: parts
-        }
-      ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-      },
-    };
-
-    console.log("Sending request to Google Gemini API...");
-
-    // 4. Send request using shared helper
-    const resJson = await generateGeminiContent(apiBody);
-    const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!textResult) {
-      console.error("Gemini completion is empty.");
-      throw new Error('Gemini API returned an empty completion.');
-    }
-
-    console.log("Raw Gemini completion text:", textResult.trim());
-
-    // Verify correct JSON syntax before returning
-    const parsedData = JSON.parse(textResult.trim());
-    
-    // Clean and validate quantity: only accept positive integers or explicitly mentioned zero
-    let finalQuantity = null;
-    if (parsedData.quantity !== undefined && parsedData.quantity !== null) {
-      const parsedQty = parseInt(parsedData.quantity, 10);
-      if (!isNaN(parsedQty) && parsedQty > 0) {
-        finalQuantity = parsedQty;
-      } else if (parsedQty === 0) {
-        const fullText = ((voiceText || '') + ' ' + (existingDescription || '')).toLowerCase();
-        const explicitlyMentionedZero = fullText.includes('0') || fullText.includes('zero') || fullText.includes('no stock') || fullText.includes('zero quantity');
-        if (explicitlyMentionedZero) {
-          finalQuantity = 0;
-        }
+    // Category – use classifier if image provided, otherwise fallback
+    let category = 'Other Handicrafts';
+    let categoryConfidence: 'high' | 'medium' | 'low' = 'low';
+    if (image) {
+      const classResult = await classifyCategory(image, mimeType);
+      if (classResult && classResult.category) {
+        category = classResult.category;
+        categoryConfidence = classResult.confidence;
       }
     }
-    parsedData.quantity = finalQuantity;
 
-    console.log("Successfully parsed and cleaned JSON response:", parsedData);
+    // Simple utilities for title, description, keywords, quantity, price suggestion
+    const extractKeywords = (text: string, max = 10) => {
+      const stopWords = new Set([
+        'the','and','or','a','an','of','in','to','for','with','by','on','at','is','are','was','were','it','this','that'
+      ]);
+      const words = text.toLowerCase().split(/[^a-z0-9]+/i).filter(w => w.length > 2 && !stopWords.has(w));
+      return Array.from(new Set(words)).slice(0, max);
+    };
+    const detectQuantity = (text: string): number | null => {
+      const m = text.match(/\b(\d+)\b/);
+      return m ? parseInt(m[1], 10) : null;
+    };
+    const generateTitle = (text: string) => {
+      const words = text.split(/\s+/);
+      return words.slice(0, 6).join(' ') + (words.length > 6 ? '...' : '');
+    };
+    const generateDescription = (text: string) => {
+      const trimmed = text.trim();
+      return trimmed.length > 300 ? trimmed.slice(0, 297) + '...' : trimmed;
+    };
+    const priceSuggestion = () => ({ min: 100, max: 500, currency: 'INR' });
 
-    return new Response(
-      JSON.stringify(parsedData),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const product_name = combinedText ? generateTitle(combinedText) : 'Untitled Product';
+    const description = combinedText ? generateDescription(combinedText) : 'No description provided.';
+    const keywords = combinedText ? extractKeywords(combinedText) : [];
+    const quantity = combinedText ? detectQuantity(combinedText) : null;
+    const price = priceSuggestion();
 
+    const response = {
+      product_name,
+      category,
+      description,
+      keywords,
+      price_suggestion: price,
+      confidence: categoryConfidence,
+      quantity,
+    };
+
+    console.log('Generated product metadata:', response);
+    return new Response(JSON.stringify(response), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error in generate-product function:', error);
     if (error.message === 'AI_QUOTA_EXHAUSTED') {
