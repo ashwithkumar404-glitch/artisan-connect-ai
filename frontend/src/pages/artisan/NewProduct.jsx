@@ -33,40 +33,38 @@ const safeInvokeAI = async (functionName, options) => {
   
   if (error) {
     console.error(`Edge Function ${functionName} returned error:`, error);
-    let errorMsg = error.message || 'AI service failed. Please try again.';
-    
+    let errorMsg = error.message || 'Service request failed. Please try again.';
+    let is503 = false;
+
     if (error instanceof FunctionsHttpError) {
+      if (error.context && error.context.status === 503) is503 = true;
+
       try {
         const body = await error.context.json();
         console.error(`Edge Function ${functionName} HTTP error body:`, body);
-        if (body && (body.code === 'AI_QUOTA_EXHAUSTED' || body.error === 'AI_QUOTA_EXHAUSTED' || body.message === 'AI_QUOTA_EXHAUSTED')) {
-          errorMsg = 'AI_QUOTA_EXHAUSTED';
-        } else if (body && body.error) {
+        if (body?.error) {
           errorMsg = body.error;
-        } else if (body && body.message) {
+        } else if (body?.message) {
           errorMsg = body.message;
         }
       } catch (_) {
         try {
           const text = await error.context.text();
           console.error(`Edge Function ${functionName} HTTP error text:`, text);
-          if (text && text.includes('AI_QUOTA_EXHAUSTED')) {
-            errorMsg = 'AI_QUOTA_EXHAUSTED';
-          } else {
-            errorMsg = text || errorMsg;
-          }
+          if (text?.includes('503') || text?.toLowerCase().includes('service unavailable')) is503 = true;
         } catch (__) {}
       }
+    } else {
+      const msg = error.message?.toLowerCase() || '';
+      if (msg.includes('503') || msg.includes('failed to send a request') || msg.includes('service unavailable')) {
+        is503 = true;
+      }
     }
-    
-    if (errorMsg === 'AI_QUOTA_EXHAUSTED' || errorMsg.includes('AI_QUOTA_EXHAUSTED')) {
-      throw new Error('🤖 AI service is temporarily busy. Please try again shortly.');
+
+    if (is503 || errorMsg.includes('503')) {
+      throw new Error('Service is temporarily unavailable (HTTP 503). Please try again shortly.');
     }
     throw new Error(errorMsg);
-  }
-  
-  if (data && (data.error === 'AI_QUOTA_EXHAUSTED' || data.code === 'AI_QUOTA_EXHAUSTED')) {
-    throw new Error('🤖 AI service is temporarily busy. Please try again shortly.');
   }
   
   return { data, error: null };
@@ -101,7 +99,7 @@ export default function NewProduct() {
   const [useEnhanced, setUseEnhanced] = useState(false);
   const [enhanceError, setEnhanceError] = useState('');
 
-  // AI voice transcription states
+  // AI voice transcription states (legacy)
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState(null);
@@ -110,6 +108,12 @@ export default function NewProduct() {
   const [transcribeResult, setTranscribeResult] = useState(null);
   const [transcribeError, setTranscribeError] = useState('');
   const [transcribeSuccess, setTranscribeSuccess] = useState('');
+
+  // Single continuous voice description state
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [isRecognizing, setIsRecognizing] = useState(false);
+  const [recognitionError, setRecognitionError] = useState('');
+  const [speechLang, setSpeechLang] = useState('en-IN');
 
   // AI product generation states
   const [isGeneratingProduct, setIsGeneratingProduct] = useState(false);
@@ -141,10 +145,12 @@ export default function NewProduct() {
   const timerRef = useRef(null);
   const audioChunksRef = useRef([]);
   const formRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const streamRef = useRef(null);
   
   const navigate = useNavigate();
 
-  // Cleanup object URLs to prevent memory leaks
+  // Cleanup object URLs and audio/speech resources to prevent memory leaks
   useEffect(() => {
     return () => {
       if (imagePreviewUrl) {
@@ -155,6 +161,14 @@ export default function NewProduct() {
       }
       if (timerRef.current) {
         clearInterval(timerRef.current);
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (_) {}
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
   }, [imagePreviewUrl, audioUrl]);
@@ -348,8 +362,10 @@ export default function NewProduct() {
     }
   };
 
+  // Single continuous voice description using real-time Web Speech recognition and audio recording
   const startRecording = async () => {
     setTranscribeError('');
+    setRecognitionError('');
     setTranscribeResult(null);
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
@@ -358,24 +374,73 @@ export default function NewProduct() {
     setAudioBlob(null);
     audioChunksRef.current = [];
 
+    // 1. Initialize & start Web Speech API for real-time speech-to-text
+    const SpeechRecognition = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+    if (SpeechRecognition) {
+      try {
+        const rec = new SpeechRecognition();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = speechLang || 'en-IN';
+
+        rec.onstart = () => {
+          setIsRecognizing(true);
+        };
+
+        rec.onresult = (e) => {
+          let interim = '';
+          let final = '';
+          for (let i = 0; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              final += e.results[i][0].transcript + ' ';
+            } else {
+              interim += e.results[i][0].transcript;
+            }
+          }
+          const text = (final + interim).trim();
+          if (text) {
+            setVoiceTranscript(text);
+            setDescription(text);
+          }
+        };
+
+        rec.onerror = (e) => {
+          console.warn('Speech recognition event:', e.error);
+          if (e.error !== 'no-speech') {
+            setRecognitionError(`Speech recognition note: ${e.error}`);
+          }
+        };
+
+        rec.onend = () => {
+          setIsRecognizing(false);
+        };
+
+        rec.start();
+        recognitionRef.current = rec;
+      } catch (recErr) {
+        console.warn('SpeechRecognition initialization error:', recErr);
+        setRecognitionError('Could not start browser speech recognition: ' + recErr.message);
+      }
+    } else {
+      setRecognitionError('Browser speech recognition is not supported in this browser. For voice transcription, please use Google Chrome, Microsoft Edge, or Safari.');
+    }
+
+    // 2. Start MediaRecorder for audio recording & preview
     try {
-      console.log("Requesting microphone permission...");
+      console.log('Requesting microphone permission...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      console.log("Beginning audio recording...");
+      streamRef.current = stream;
       const mediaRecorder = new MediaRecorder(stream);
-      
+
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
-        console.log("Voice recording captured successfully. Blob type:", blob.type, "Size:", blob.size);
+        console.log('Voice recording captured. Blob type:', blob.type, 'Size:', blob.size);
       };
 
       mediaRecorder.start();
@@ -383,44 +448,51 @@ export default function NewProduct() {
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Start elapsed timer
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => {
-          if (prev >= 59) {
+          if (prev >= 119) {
             stopRecording();
-            return 60;
+            return 120;
           }
           return prev + 1;
         });
       }, 1000);
-
     } catch (err) {
-      console.error('Error requesting microphone permissions:', err);
+      console.error('Mic permission error:', err);
       setTranscribeError('Could not access microphone. Please enable microphone permissions in your browser.');
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+        recognitionRef.current = null;
+      }
+      setIsRecognizing(false);
     }
   };
 
   const stopRecording = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {}
+      recognitionRef.current = null;
     }
-    
+    setIsRecognizing(false);
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
     setIsRecording(false);
-    console.log("Recording stopped.");
+    console.log('Recording stopped.');
   };
 
   const performVoiceTranscription = async () => {
     if (!audioBlob || audioBlob.size === 0) {
       throw new Error('Voice message is empty. Please record again.');
-    }
-
-    if (recordingTime > 60) {
-      throw new Error('Voice message exceeds 60 seconds limit.');
     }
 
     const reader = new FileReader();
@@ -435,12 +507,6 @@ export default function NewProduct() {
     });
 
     const mimeType = audioBlob.type || 'audio/webm';
-    console.log("--- Voice Recording Diagnostics ---");
-    console.log("Audio MIME type:", mimeType);
-    console.log("Audio blob size:", audioBlob.size, "bytes");
-    console.log("Base64 data length:", base64Data.length, "characters");
-    console.log("-----------------------------------");
-
     console.log(`Invoking Edge Function 'transcribe-voice' with MIME: ${mimeType}`);
 
     const { data } = await safeInvokeAI('transcribe-voice', {
@@ -452,37 +518,20 @@ export default function NewProduct() {
 
     console.log("Transcription response received:", data);
     
-    if (!data || !data.transcript) {
-      throw new Error('Malformed translation response received from AI model.');
+    if (!data || (!data.transcript && !data.english_translation)) {
+      throw new Error('No transcript returned from server.');
     }
 
     setTranscribeResult(data);
+    const transcriptText = data.english_translation || data.transcript;
+    if (transcriptText) {
+      setVoiceTranscript(transcriptText);
+      setDescription(transcriptText);
+    }
     return data;
   };
 
-  const handleSendVoiceToAI = async () => {
-    setTranscribeError('');
-    setTranscribeResult(null);
-    setIsTranscribing(true);
 
-    try {
-      await performVoiceTranscription();
-    } catch (err) {
-      console.error('AI Transcription error:', err);
-      setTranscribeError(`Voice processing failed: ${err.message || 'Please try again.'}`);
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
-  const handleUseVoiceDescription = () => {
-    if (transcribeResult && transcribeResult.english_translation) {
-      setDescription(transcribeResult.english_translation);
-      setTranscribeSuccess('English description added.');
-      setTimeout(() => setTranscribeSuccess(''), 3000);
-      console.log("Description updated from English translation.");
-    }
-  };
 
   const executePriceIntelligence = async (productName, category, description, quantity, similarProducts) => {
     setPriceIntelligenceError('');
@@ -527,150 +576,7 @@ export default function NewProduct() {
     }
   };
 
-  const handleGenerateProduct = async () => {
-    setGenerateProductError('');
-    setGeneratedProductResult(null);
-    setPriceIntelligenceResult(null);
-    setPriceIntelligenceError('');
-    setApplyDetailsSuccess('');
-    setIsGeneratingProduct(true);
-
-    try {
-      // 1. If voice recording exists and has not been transcribed yet, transcribe it first
-      let activeVoiceTranscript = transcribeResult?.english_translation || null;
-      if (audioBlob && !transcribeResult) {
-        setIsTranscribing(true);
-        try {
-          const transcribeData = await performVoiceTranscription();
-          if (transcribeData && transcribeData.english_translation) {
-            activeVoiceTranscript = transcribeData.english_translation;
-          }
-        } catch (transcribeErr) {
-          console.error("Auto-transcription failed:", transcribeErr);
-          throw new Error('Failed to transcribe voice recording. ' + transcribeErr.message);
-        } finally {
-          setIsTranscribing(false);
-        }
-      }
-
-      let base64Image = null;
-      let mimeType = null;
-
-      // 2. Determine active image to send (if any)
-      if (useEnhanced && enhancedImageUrl) {
-        base64Image = enhancedImageUrl.split(',')[1];
-        mimeType = 'image/jpeg';
-      } else if (imageFile) {
-        const resBase64 = await getBase64(imageFile);
-        base64Image = resBase64.split(',')[1];
-        mimeType = imageFile.type;
-      }
-
-      // 3. Determine description
-      const manualDesc = description || null;
-
-      if (!base64Image && !activeVoiceTranscript && !manualDesc) {
-        throw new Error('Please select an image, record a voice description, or enter a description first.');
-      }
-
-      console.log("Invoking Edge Function 'generate-product'...");
-      const { data } = await safeInvokeAI('generate-product', {
-        body: {
-          image: base64Image,
-          mimeType,
-          voiceTranscript: activeVoiceTranscript,
-          description: manualDesc
-        }
-      });
-
-      console.log("Product metadata generation response:", data);
-      
-      if (!data || !data.product_name) {
-        throw new Error('Malformed metadata response received from AI model.');
-      }
-
-      setGeneratedProductResult(data);
-
-      // Auto-populate the actual form fields immediately after successful generation
-      if (data.product_name) {
-        // Limit title to max 6 words for concise product name
-        const words = data.product_name.split(/\s+/);
-        const shortTitle = words.length > 6 ? words.slice(0, 6).join(' ') + '...' : data.product_name;
-        setName(shortTitle);
-      }
-
-      let matchedCategoryId = null;
-      let categoryName = data.category || '';
-      if (data.category && categoriesList.length > 0) {
-        const foundCategory = categoriesList.find(
-          cat => cat.name.toLowerCase() === data.category.toLowerCase()
-        );
-        if (foundCategory) {
-          matchedCategoryId = foundCategory.id;
-          setSelectedCategoryId(foundCategory.id);
-        } else {
-          console.warn(`Generated category "${data.category}" not found in current marketplace list.`);
-        }
-      }
-
-      if (data.description) {
-        setDescription(data.description);
-      }
-
-      if (data.price_suggestion) {
-        if (!isPriceManuallyEdited) {
-          const { min, max } = data.price_suggestion;
-          const midPrice = Math.round((min + max) / 2);
-          setPrice(midPrice.toString());
-        }
-      }
-
-      if (data.quantity !== undefined && data.quantity !== null) {
-        setStockQuantity(data.quantity.toString());
-      } else {
-        setStockQuantity(''); // If quantity is not mentioned, keep it empty/blank for manual input
-      }
-
-      setApplyDetailsSuccess('Form fields populated successfully. Feel free to review and adjust.');
-      setTimeout(() => setApplyDetailsSuccess(''), 5000);
-
-      // Fetch similar published products and run price intelligence automatically
-      const finalCategoryId = matchedCategoryId || selectedCategoryId;
-      if (finalCategoryId) {
-        try {
-          console.log("Fetching similar published products for category ID:", finalCategoryId);
-          const { data: similarList, error: similarErr } = await supabase
-            .from('products')
-            .select('name, description, price, category_id')
-            .eq('category_id', finalCategoryId)
-            .eq('status', 'published');
-
-          if (similarErr) {
-            console.error("Error fetching similar products:", similarErr);
-            setPriceIntelligenceError("Failed to fetch similar marketplace products. " + similarErr.message);
-          } else {
-            await executePriceIntelligence(
-              data.product_name,
-              categoryName,
-              data.description,
-              data.quantity,
-              similarList || []
-            );
-          }
-        } catch (priceIntelErr) {
-          console.error("Price Intelligence pipeline failed:", priceIntelErr);
-          setPriceIntelligenceError(priceIntelErr.message || "Failed to analyze marketplace prices.");
-        }
-      }
-
-      setShowAiReview(true);
-    } catch (err) {
-      console.error('AI Product Generator error:', err);
-      setGenerateProductError(err.message || 'AI product generation failed. Please try again.');
-    } finally {
-      setIsGeneratingProduct(false);
-    }
-  };
+  const handleGenerateProduct = () => runOrchestratedPipeline();
 
   const runOrchestratedPipeline = async () => {
     if (isPipelineRunning) return;
@@ -702,36 +608,48 @@ export default function NewProduct() {
     // Tiny delay for UI feel
     await new Promise(r => setTimeout(r, 600));
 
-    let activeDescription = description || '';
+    let activeDescription = description || voiceTranscript || '';
 
-    // STEP 2: Voice transcription
-    if (audioBlob && !transcribeResult) {
-      setPipelineStep('voice');
-      progress.voice = 'running';
+    // STEP 2: Voice transcription / speech handling
+    setPipelineStep('voice');
+    progress.voice = 'running';
+    setPipelineProgress({ ...progress });
+
+    if (voiceTranscript || activeDescription.trim()) {
+      progress.voice = 'success';
       setPipelineProgress({ ...progress });
+      activeDescription = activeDescription.trim() || voiceTranscript.trim();
+    } else if (audioBlob && !transcribeResult) {
       try {
         const transcribeData = await performVoiceTranscription();
         progress.voice = 'success';
         setPipelineProgress({ ...progress });
-        const voiceText = transcribeData.english_translation || '';
+        const voiceText = transcribeData.english_translation || transcribeData.transcript || '';
         if (voiceText) {
-          activeDescription = description.trim() 
-            ? `${description.trim()}\n\n${voiceText}`
+          activeDescription = activeDescription.trim() 
+            ? `${activeDescription.trim()}\n\n${voiceText}`
             : voiceText;
           setDescription(activeDescription);
         }
       } catch (err) {
-        console.error("Pipeline Voice Transcription Error:", err);
-        progress.voice = 'error';
-        setPipelineProgress({ ...progress });
-        if (!description.trim()) {
-          setPipelineError(`Voice processing failed: ${err.message || 'Please try again.'}`);
+        console.warn("Pipeline Voice Transcription Error:", err);
+        if (!activeDescription.trim() && !imageFile) {
+          progress.voice = 'error';
+          setPipelineProgress({ ...progress });
+          setPipelineError(
+            err.message?.includes('501') || err.message?.includes('unavailable')
+              ? 'Server voice transcription service is unavailable (HTTP 501: Not Implemented). In supported browsers (Chrome, Edge, Safari), your voice is transcribed live while recording.'
+              : `Voice processing failed: ${err.message || 'Please try again.'}`
+          );
           setIsPipelineRunning(false);
           return;
+        } else {
+          progress.voice = 'skipped';
+          setPipelineProgress({ ...progress });
         }
       }
     } else {
-      progress.voice = audioBlob ? 'success' : 'skipped';
+      progress.voice = activeDescription ? 'success' : 'skipped';
       setPipelineProgress({ ...progress });
     }
 
@@ -760,7 +678,7 @@ export default function NewProduct() {
         body: {
           image: base64Image,
           mimeType,
-          voiceTranscript: transcribeResult?.english_translation || null,
+          voiceTranscript: voiceTranscript || transcribeResult?.english_translation || transcribeResult?.transcript || null,
           description: activeDescription || null
         }
       });
@@ -1041,7 +959,7 @@ export default function NewProduct() {
     }
   };
 
-  const isAiCreatorEnabled = !!imageFile || !!audioBlob || !!(transcribeResult?.english_translation) || !!description.trim();
+  const isAiCreatorEnabled = !!imageFile || !!audioBlob || !!voiceTranscript || !!(transcribeResult?.english_translation) || !!description.trim();
 
   return (
     <div className="space-y-6">
@@ -1065,7 +983,7 @@ export default function NewProduct() {
           <span className="text-3xl p-2.5 bg-indigo-100/80 text-indigo-700 rounded-2xl shadow-sm">✨</span>
           <div>
             <h3 className="text-xl font-black text-gov-navy m-0">Create Product with AI</h3>
-            <p className="text-xs text-slate-500 mt-1 font-medium font-bold">Upload a product photo and describe your product. AI will prepare your marketplace listing.</p>
+            <p className="text-xs text-slate-500 mt-1 font-medium font-bold">Upload a product photo and record one continuous voice description. AI will prepare your marketplace listing.</p>
           </div>
         </div>
 
@@ -1119,31 +1037,100 @@ export default function NewProduct() {
             )}
           </div>
 
-          {/* Product Description */}
+          {/* Continuous Voice Description */}
           <div className="bg-white/60 backdrop-blur-xs border border-slate-200/80 rounded-xl p-5 flex flex-col justify-between space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🎙️</span>
-                <span className="font-bold text-slate-800 text-sm">Describe Your Product</span>
+                <span className="font-bold text-slate-800 text-sm">One-Shot Voice Description</span>
               </div>
               
-              {audioUrl && !isRecording && (
+              {voiceTranscript ? (
+                <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  ✓ Speech Transcribed
+                </span>
+              ) : audioUrl && !isRecording ? (
                 <span className="bg-indigo-100 text-indigo-805 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   Audio Ready
                 </span>
-              )}
+              ) : null}
             </div>
 
-            <textarea
-              rows="3"
-              placeholder="Describe your craft, materials used, size, and care instructions, or record your voice below..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-350 rounded-lg text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy bg-white"
-            ></textarea>
-            {/* Show transcription result if available */}
-            {transcribeResult?.transcript && (
-              <p className="mt-1 text-xs text-slate-500 italic">Transcribed: {transcribeResult.transcript}</p>
+            {/* Instruction Box: What to describe naturally */}
+            <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-950 space-y-1.5">
+              <div className="font-bold text-indigo-900 flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Describe your craft naturally in one continuous voice recording:</span>
+              </div>
+              <ul className="text-[11px] text-slate-700 space-y-0.5 list-disc list-inside pl-1 leading-relaxed">
+                <li>What the product is and what it is used for</li>
+                <li>Materials used and how it was handcrafted</li>
+                <li>Special qualities, design details, or dimensions</li>
+                <li>Time taken, production cost, or desired selling price (optional)</li>
+              </ul>
+            </div>
+
+            {/* Language Selection */}
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <label htmlFor="voice-lang-select" className="text-slate-600 font-semibold text-[11px] flex items-center gap-1">
+                <span>🌐</span> Speaking language:
+              </label>
+              <select
+                id="voice-lang-select"
+                value={speechLang}
+                onChange={(e) => setSpeechLang(e.target.value)}
+                disabled={isRecording}
+                className="bg-white border border-slate-300 text-slate-700 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-gov-navy font-medium"
+              >
+                <option value="en-IN">English (India)</option>
+                <option value="hi-IN">Hindi (हिंदी)</option>
+                <option value="kn-IN">Kannada (ಕನ್ನಡ)</option>
+                <option value="ta-IN">Tamil (தமிழ்)</option>
+                <option value="te-IN">Telugu (తెలుగు)</option>
+                <option value="en-US">English (US)</option>
+              </select>
+            </div>
+
+            {/* Real-time Voice Transcript / Description Field */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold text-slate-600">
+                  {isRecognizing ? '🎙️ Listening & Transcribing Live...' : 'Product Description (Voice Transcript):'}
+                </span>
+                {description && (
+                  <span className="text-[10px] text-slate-400">
+                    Optional manual edit
+                  </span>
+                )}
+              </div>
+              <textarea
+                rows="3"
+                placeholder="Click 'Start Voice Description' below and speak in your own words. Your speech will be converted to text automatically..."
+                value={description}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (!voiceTranscript && e.target.value) {
+                    setVoiceTranscript(e.target.value);
+                  }
+                }}
+                className={`w-full px-3 py-2 border rounded-lg text-xs bg-white transition-all ${
+                  isRecognizing 
+                    ? 'border-red-400 ring-2 ring-red-100 bg-red-50/20' 
+                    : 'border-slate-350 focus:ring-2 focus:ring-gov-navy focus:border-gov-navy'
+                }`}
+              ></textarea>
+            </div>
+
+            {/* Recognition or Microphone Errors */}
+            {recognitionError && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-850 rounded text-[11px] leading-relaxed">
+                ⚠️ {recognitionError}
+              </div>
+            )}
+            {transcribeError && (
+              <div className="p-2.5 bg-red-50 border border-red-200 text-red-800 rounded text-[11px] leading-relaxed">
+                ⚠️ {transcribeError}
+              </div>
             )}
 
             {/* Voice record controls */}
@@ -1151,28 +1138,35 @@ export default function NewProduct() {
               {isRecording ? (
                 <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-2.5">
                   <div className="flex items-center gap-2 text-red-655 font-bold text-xs animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-red-600"></span>
-                    <span>🔴 Recording... {formatTime(recordingTime)}</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping"></span>
+                    <span>🔴 Recording & Transcribing... {formatTime(recordingTime)}</span>
                   </div>
                   <button
                     type="button"
                     onClick={stopRecording}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1 min-h-[32px] shadow-sm"
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-sm min-h-[34px]"
                   >
-                    <span>⏹️</span> Stop Recording
+                    <span>⏹️</span> Finish Recording
                   </button>
                 </div>
               ) : audioUrl ? (
                 <div className="flex flex-col gap-2 bg-slate-50 border border-slate-200 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-indigo-700 font-bold">
-                    <span>🎙️</span> Audio Ready
+                  <div className="flex items-center justify-between text-xs text-indigo-700 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span>🎙️</span> Voice Recorded ({recordingTime}s)
+                    </span>
+                    {voiceTranscript && (
+                      <span className="text-green-700 text-[10px] bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                        Speech Recognized
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <audio src={audioUrl} controls className="w-full h-8" />
                     <button
                       type="button"
                       onClick={startRecording}
-                      className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded transition-all cursor-pointer whitespace-nowrap min-h-[30px]"
+                      className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded transition-all cursor-pointer whitespace-nowrap min-h-[30px]"
                     >
                       🔄 Record Again
                     </button>
@@ -1182,10 +1176,10 @@ export default function NewProduct() {
                 <button
                   type="button"
                   onClick={startRecording}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1.5 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-indigo-500/20"
                 >
-                  <span>🎙️</span>
-                  <span>Record Voice Description</span>
+                  <span className="text-base">🎙️</span>
+                  <span>Start Voice Description</span>
                 </button>
               )}
             </div>
@@ -1257,7 +1251,7 @@ export default function NewProduct() {
           {!isPipelineRunning && !showAiReview && (
             <button
               type="button"
-              disabled={!imagePreviewUrl && !description.trim() && !audioBlob}
+              disabled={!imagePreviewUrl && !description.trim() && !voiceTranscript && !audioBlob}
               onClick={runOrchestratedPipeline}
               className="w-full md:w-72 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md hover:shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer text-sm"
             >
@@ -1266,9 +1260,9 @@ export default function NewProduct() {
             </button>
           )}
 
-          {!isPipelineRunning && !showAiReview && !imagePreviewUrl && !description.trim() && !audioBlob && (
+          {!isPipelineRunning && !showAiReview && !imagePreviewUrl && !description.trim() && !voiceTranscript && !audioBlob && (
             <span className="text-[10px] text-amber-600 font-semibold mt-2.5">
-              ⚠️ Please select an image or add description details to begin AI Creation.
+              ⚠️ Please select an image or record your voice description to begin AI Creation.
             </span>
           )}
         </div>
@@ -1320,8 +1314,16 @@ export default function NewProduct() {
 
                 {/* Non-blocking Quality analysis failure */}
                 {aiError && (
-                  <div className="bg-amber-950/40 border border-amber-900/60 text-amber-400 p-2.5 rounded text-[11px] leading-relaxed">
-                    Image quality analysis is temporarily unavailable.
+                  <div className="bg-amber-950/40 border border-amber-900/60 text-amber-400 p-2.5 rounded text-[11px] leading-relaxed flex items-center justify-between">
+                    <span>Image quality analysis note: {aiError}</span>
+                    <button
+                      type="button"
+                      disabled={isAnalyzing}
+                      onClick={handleAnalyzeImage}
+                      className="bg-amber-900 hover:bg-amber-800 text-amber-200 text-[10px] font-bold px-2 py-1 rounded ml-2 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      {isAnalyzing ? 'Retrying...' : '🔄 Retry'}
+                    </button>
                   </div>
                 )}
 
@@ -1729,142 +1731,7 @@ export default function NewProduct() {
               ></textarea>
             </div>
 
-            {/* AI Voice Assistant section */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xl" role="img" aria-label="Microphone">🎙️</span>
-                <h4 className="font-bold text-gov-navy m-0 text-sm">Describe Handicraft by Voice</h4>
-              </div>
-              <p className="text-xs text-slate-550 leading-relaxed">
-                Describe your handicraft by speaking in your local language (e.g. Kannada, Hindi, English). Gemini will automatically transcribe and translate it into English.
-              </p>
 
-              {!isRecording && !audioUrl && (
-                <button
-                  type="button"
-                  onClick={startRecording}
-                  disabled={isSubmitting || isAnalyzing || isEnhancing || isTranscribing}
-                  className="bg-gov-navy hover:bg-gov-navy-light text-white text-xs font-bold px-4 py-2 rounded transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 min-h-[34px]"
-                >
-                  <span className="text-sm">🎙️</span>
-                  <span>Start Recording Description</span>
-                </button>
-              )}
-
-              {isRecording && (
-                <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded p-3">
-                  <div className="flex items-center gap-2 text-red-655 font-bold text-xs animate-pulse">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-600"></span>
-                    <span>🔴 Recording... {formatTime(recordingTime)}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1 shadow-sm"
-                  >
-                    <span>⏹️</span> Stop Recording
-                  </button>
-                </div>
-              )}
-
-              {!isRecording && audioUrl && (
-                <div className="space-y-4 border border-slate-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-bold text-indigo-705 flex items-center gap-1">
-                      <span>🎙️</span> Audio Ready
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-semibold">{recordingTime}s recorded (max 60s)</span>
-                  </div>
-                  <audio src={audioUrl} controls className="w-full h-9" />
-                  
-                  <div className="flex gap-2.5 pt-1">
-                    <button
-                      type="button"
-                      disabled={isTranscribing}
-                      onClick={handleSendVoiceToAI}
-                      className="bg-gov-navy hover:bg-gov-navy-light text-white text-xs font-bold px-3.5 py-2 rounded transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50 min-h-[34px]"
-                    >
-                      {isTranscribing ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Transcribing and translating...</span>
-                        </>
-                      ) : (
-                        <span>✈️ Send to AI</span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isTranscribing}
-                      onClick={startRecording}
-                      className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold px-3.5 py-2 rounded transition-all cursor-pointer disabled:opacity-50 min-h-[34px]"
-                    >
-                      🔄 Record Again
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {transcribeError && (
-                <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 text-xs font-semibold">
-                  ⚠️ {transcribeError}
-                </div>
-              )}
-
-              {transcribeResult && (
-                <div className="border border-slate-250 rounded-lg p-4 bg-white space-y-4 animate-fade-in">
-                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                    <span className="text-lg">🤖</span>
-                    <h4 className="font-bold text-slate-800 text-sm m-0">AI Voice Result</h4>
-                  </div>
-                  
-                  <div className="space-y-3.5 text-xs">
-                    <div>
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Language detected:</span>
-                      <span className="font-bold text-slate-800 capitalize block mt-0.5">{transcribeResult.detected_language}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Original speech transcription:</span>
-                      <p className="text-slate-700 leading-relaxed bg-slate-50 border border-slate-150 rounded p-2.5 mt-1 italic whitespace-pre-wrap">
-                        "{transcribeResult.transcript}"
-                      </p>
-                    </div>
-
-                    <div>
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">English translation:</span>
-                      <p className="text-slate-700 leading-relaxed bg-slate-50 border border-slate-150 rounded p-2.5 mt-1 font-medium whitespace-pre-wrap">
-                        "{transcribeResult.english_translation}"
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between border-t border-slate-200 pt-3">
-                      <div>
-                        <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Confidence:</span>
-                        <span className={`font-bold mt-0.5 capitalize block ${
-                          transcribeResult.confidence === 'high' ? 'text-green-600' :
-                          transcribeResult.confidence === 'medium' ? 'text-amber-600' : 'text-red-655'
-                        }`}>
-                          {transcribeResult.confidence}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleUseVoiceDescription}
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-3 py-1.5 rounded transition-all cursor-pointer shadow-sm min-h-[30px]"
-                      >
-                        Use English Description
-                      </button>
-                      {transcribeSuccess && (
-                        <span className="text-green-600 text-xs font-semibold ml-2 animate-pulse">
-                          ✓ {transcribeSuccess}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Image Selector & Preview */}
             <div className="space-y-1.5">
@@ -1946,8 +1813,16 @@ export default function NewProduct() {
                   </div>
 
                   {aiError && (
-                    <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 text-xs font-semibold">
-                      ⚠️ {aiError}
+                    <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 text-xs font-semibold flex items-center justify-between">
+                      <span>⚠️ {aiError}</span>
+                      <button
+                        type="button"
+                        disabled={isSubmitting || isAnalyzing}
+                        onClick={handleAnalyzeImage}
+                        className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition-all cursor-pointer disabled:opacity-50 ml-3 whitespace-nowrap"
+                      >
+                        {isAnalyzing ? 'Retrying...' : '🔄 Retry Analysis'}
+                      </button>
                     </div>
                   )}
 
@@ -2100,33 +1975,54 @@ export default function NewProduct() {
           <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4 shadow-sm">
             <div className="flex items-center gap-2">
               <span className="text-xl" role="img" aria-label="Robot face">🤖</span>
-              <h3 className="font-bold text-gov-navy m-0 text-base">AI Product Creator</h3>
+              <h3 className="font-bold text-gov-navy m-0 text-base">AI Assistant Status</h3>
             </div>
             <p className="text-xs text-slate-550 leading-relaxed">
-              Use your product image and artisan description to automatically create product details.
+              Combine your product photo and spoken voice description to generate marketplace-ready details.
             </p>
+
+            <div className="space-y-2 text-xs border border-slate-100 rounded-lg p-3 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium">📷 Product Photo:</span>
+                <span className={`font-bold ${imageFile || imagePreviewUrl ? 'text-green-600' : 'text-slate-400'}`}>
+                  {imageFile || imagePreviewUrl ? '✓ Attached' : 'Pending'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium">🎙️ Voice Description:</span>
+                <span className={`font-bold ${voiceTranscript || description.trim() ? 'text-green-600' : 'text-slate-400'}`}>
+                  {voiceTranscript ? '✓ Transcribed' : description.trim() ? '✓ Entered' : 'Pending'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium">✨ AI Listing:</span>
+                <span className={`font-bold ${generatedProductResult ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  {generatedProductResult ? '✓ Ready' : 'Pending'}
+                </span>
+              </div>
+            </div>
 
             <button
               type="button"
-              disabled={!isAiCreatorEnabled || isSubmitting || isAnalyzing || isEnhancing || isTranscribing || isGeneratingProduct}
-              onClick={handleGenerateProduct}
+              disabled={!isAiCreatorEnabled || isSubmitting || isAnalyzing || isEnhancing || isGeneratingProduct || isPipelineRunning}
+              onClick={runOrchestratedPipeline}
               className="w-full bg-gov-navy hover:bg-gov-navy-light text-white text-xs font-bold py-2.5 px-4 rounded transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 min-h-[38px]"
             >
-              {isGeneratingProduct ? (
+              {isPipelineRunning || isGeneratingProduct ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>✨ Creating product details...</span>
+                  <span>✨ Generating with AI...</span>
                 </>
+              ) : generatedProductResult ? (
+                <span>🔄 Regenerate with AI</span>
               ) : (
-                <>
-                  <span>✨ Describe Product with AI</span>
-                </>
+                <span>✨ Create Product with AI</span>
               )}
             </button>
 
             {!isAiCreatorEnabled && (
               <p className="text-[10px] text-amber-600 font-semibold text-center mt-1">
-                ⚠️ Upload an image or enter a description first to enable AI details.
+                ⚠️ Upload an image or record voice to generate listing.
               </p>
             )}
 

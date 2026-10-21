@@ -1,4 +1,39 @@
+# Dependencies & Build Outputs
+node_modules/
+dist/
+dist-ssr/
+build/
+*.local
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python Virtual Environments & Caches
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
 
 # Supabase local files
 supabase/.temp/
+supabase/.branches/
 
+# ML local data exports & models (local only)
+ml/data/*
+!ml/data/labeled_products_template.csv
+ml/model/*.pkl

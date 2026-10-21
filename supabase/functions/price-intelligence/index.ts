@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
     // Early return if no comparable data
     if (comparable_products_count === 0) {
-      console.log('Zero valid comparable products. Returning early 200 response without invoking Gemini.');
+      console.log('Zero valid comparable products. Returning early 200 response.');
       return new Response(
         JSON.stringify({
           comparable_products_count: 0,

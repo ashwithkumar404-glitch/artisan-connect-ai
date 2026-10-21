@@ -1,4 +1,4 @@
-// Deno Serverless Edge Function for Artisan Connect AI Image Audit (Gemini replaced with deterministic CV)
+// Deno Serverless Edge Function for Artisan Connect AI Image Audit using deterministic CV
 import { Image } from 'https://deno.land/x/imagescript@1.3.0/mod.ts';
 
 // Access-Control CORS headers for cross-origin resource requests
@@ -9,7 +9,7 @@ const corsHeaders = {
 
 /**
  * Helper to compute image quality metrics using deterministic algorithms.
- * Returns an object matching the original Gemini contract.
+ * Returns an object matching the image audit contract.
  */
 async function auditImage({
   image,
