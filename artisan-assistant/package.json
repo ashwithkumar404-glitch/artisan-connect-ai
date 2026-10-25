@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node --test tests/kannada_pipeline.test.js tests/voice_recognition.test.js",
+    "test": "node --test tests/kannada_pipeline.test.js tests/voice_recognition.test.js tests/mobile_camera_gallery.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

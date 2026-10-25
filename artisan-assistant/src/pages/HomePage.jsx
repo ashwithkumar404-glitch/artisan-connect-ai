@@ -52,7 +52,9 @@ function HomePage() {
     voiceState === VOICE_STATES.REQUESTING_PERMISSION ||
     voiceState === VOICE_STATES.PROCESSING;
 
-  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const [showPhotoPickerSheet, setShowPhotoPickerSheet] = useState(false);
   const chatBottomRef = useRef(null);
 
   const isKn = selectedLanguage === 'kn';
@@ -147,11 +149,28 @@ function HomePage() {
     };
   }, [user, artisan, authLoading, selectedLanguage, isKn]);
 
+  // Helpers to trigger Camera vs Gallery
+  const triggerCamera = () => {
+    setShowPhotoPickerSheet(false);
+    cameraInputRef.current?.click();
+  };
+
+  const triggerGallery = () => {
+    setShowPhotoPickerSheet(false);
+    galleryInputRef.current?.click();
+  };
+
   // Action Button router
   const handleActionClick = (action) => {
     switch (action) {
       case 'start_add_product':
         startProductCreation();
+        break;
+      case 'open_camera':
+        triggerCamera();
+        break;
+      case 'open_gallery':
+        triggerGallery();
         break;
       case 'view_products':
         navigate('/my-products');
@@ -163,9 +182,12 @@ function HomePage() {
       case 'how_it_works':
         addAssistantMessage(
           isKn
-            ? "ℹ️ **ಆರ್ಟಿಸನ್ ಕನೆಕ್ಟ್ ಸಹಾಯಕ ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ:**\n\n1. **ಫೋಟೋ ತೆಗೆಯಿರಿ**: 📎 ಅಥವಾ 📸 ಬಟನ್ ಒತ್ತಿ ಉತ್ಪನ್ನದ ಸ್ಪಷ್ಟ ಫೋಟೋ ತೆಗೆಯಿರಿ.\n2. **ಧ್ವನಿಯಲ್ಲಿ ಮಾತನಾಡಿ**: 🎙️ ಮೈಕ್ರೊಫೋನ್ ಒತ್ತಿ ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಉತ್ಪನ್ನದ ವಸ್ತು, ತಂತ್ರಜ್ಞಾನ, ಮತ್ತು ಬೆಲೆಯನ್ನು ವಿವರಿಸಿ.\n3. **ಪರಿಶೀಲಿಸಿ**: ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಸಿದ್ಧವಾದ ಶೀರ್ಷಿಕೆ ಮತ್ತು ವಿವರಣೆಯನ್ನು ಪರಿಶೀಲಿಸಿ, ಧ್ವನಿ ಮೂಲಕ ತಿದ್ದಿ.\n4. **ಪ್ರಕಟಿಸಿ**: ಅಂತಿಮ ಅನುಮೋದನೆಯ ನಂತರ ನೇರವಾಗಿ ಮಾರುಕಟ್ಟೆಗೆ ಸೇರಿಸಿ!"
-            : "ℹ️ **How Artisan Connect Assistant Works:**\n\n1. **Take a Photo**: Tap the 📎 attachment or 📸 button to take a photo.\n2. **Speak Description**: Tap the 🎙️ microphone and describe materials, craft techniques, or estimated price.\n3. **Review**: Review the structured local-language listing and correct via voice.\n4. **Publish**: After explicit confirmation, publish the verified listing to the marketplace!",
-          [{ label: isKn ? '📸 ಈಗಲೇ ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '📸 Start Listing Now', action: 'start_add_product' }]
+            ? "ℹ️ **ಆರ್ಟಿಸನ್ ಕನೆಕ್ಟ್ ಸಹಾಯಕ ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ:**\n\n1. **ಫೋಟೋ ತೆಗೆಯಿರಿ ಅಥವಾ ಆಯ್ಕೆಮಾಡಿ**: 📷 ಕ್ಯಾಮೆರಾ ಬಳಸಿ ಫೋಟೋ ತೆಗೆಯಿರಿ ಅಥವಾ 🖼️ ಗ್ಯಾಲರಿಯಿಂದ ಆಯ್ಕೆಮಾಡಿ.\n2. **ಧ್ವನಿಯಲ್ಲಿ ಮಾತನಾಡಿ**: 🎙️ ಮೈಕ್ರೊಫೋನ್ ಒತ್ತಿ ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಉತ್ಪನ್ನದ ವಸ್ತು, ತಂತ್ರಜ್ಞಾನ, ಮತ್ತು ಬೆಲೆಯನ್ನು ವಿವರಿಸಿ.\n3. **ಪರಿಶೀಲಿಸಿ**: ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಸಿದ್ಧವಾದ ಶೀರ್ಷಿಕೆ ಮತ್ತು ವಿವರಣೆಯನ್ನು ಪರಿಶೀಲಿಸಿ, ಧ್ವನಿ ಮೂಲಕ ತಿದ್ದಿ.\n4. **ಪ್ರಕಟಿಸಿ**: ಅಂತಿಮ ಅನುಮೋದನೆಯ ನಂತರ ನೇರವಾಗಿ ಮಾರುಕಟ್ಟೆಗೆ ಸೇರಿಸಿ!"
+            : "ℹ️ **How Artisan Connect Assistant Works:**\n\n1. **Take Photo or Choose Gallery**: Snap using 📷 camera or select from 🖼️ gallery.\n2. **Speak Description**: Tap the 🎙️ microphone and describe materials, craft techniques, or estimated price.\n3. **Review**: Review the structured local-language listing and correct via voice.\n4. **Publish**: After explicit confirmation, publish the verified listing to the marketplace!",
+          [
+            { label: isKn ? '📷 ಕ್ಯಾಮೆರಾ ಬಳಸಿ' : '📷 Take Photo', action: 'open_camera' },
+            { label: isKn ? '🖼️ ಗ್ಯಾಲರಿಯಿಂದ ಆಯ್ಕೆ' : '🖼️ Choose from Gallery', action: 'open_gallery' }
+          ]
         );
         break;
       case 'cancel_flow':
@@ -177,6 +199,9 @@ function HomePage() {
   };
 
   const resetWorkflow = (msg = isKn ? "ಮುಂದಿನ ಕರಕುಶಲ ಉತ್ಪನ್ನಕ್ಕಾಗಿ ಸಿದ್ಧವಾಗಿದೆ." : "Ready for your next craft item.") => {
+    if (pendingImagePreview) {
+      URL.revokeObjectURL(pendingImagePreview);
+    }
     setWorkflowState('idle');
     setPendingImageFile(null);
     setPendingImagePreview('');
@@ -185,13 +210,42 @@ function HomePage() {
     setOriginalAudioUrl('');
     setRawTranscript('');
     setExtractedFacts(null);
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
     addAssistantMessage(msg, [
-      { label: isKn ? '📸 ಫೋಟೋ ತೆಗೆದು ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '📸 Snap & Add Product', action: 'start_add_product' },
+      { label: isKn ? '📸 ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '📸 Add Product', action: 'start_add_product' },
       { label: isKn ? '📦 ನನ್ನ ಉತ್ಪನ್ನಗಳನ್ನು ನೋಡಿ' : '📦 View My Products', action: 'view_products' }
     ]);
   };
 
-  // 1. Start Product Creation
+  // Remove current pending photo
+  const removePendingPhoto = () => {
+    if (pendingImagePreview) {
+      URL.revokeObjectURL(pendingImagePreview);
+    }
+    setPendingImageFile(null);
+    setPendingImagePreview('');
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
+
+    if (currentDraft) {
+      setCurrentDraft(prev => prev ? { ...prev, imageUrl: '' } : null);
+      setMessages(prev => prev.map(m => m.draft ? { ...m, draft: { ...m.draft, imageUrl: '' } } : m));
+    }
+
+    addAssistantMessage(
+      isKn
+        ? "🗑️ ಉತ್ಪನ್ನದ ಫೋಟೋವನ್ನು ತೆಗೆದುಹಾಕಲಾಗಿದೆ. ಹೊಸ ಫೋಟೋ ಸೇರಿಸಲು ಕೆಳಗಿನ ಆಯ್ಕೆಯನ್ನು ಆರಿಸಿ ಅಥವಾ 📎 ಐಕಾನ್ ಒತ್ತಿ."
+        : "🗑️ Product photo removed. Choose an option below or tap 📎 to attach a new photo.",
+      [
+        { label: isKn ? '📷 ಕ್ಯಾಮೆರಾ ಬಳಸಿ' : '📷 Take Photo', action: 'open_camera' },
+        { label: isKn ? '🖼️ ಗ್ಯಾಲರಿಯಿಂದ ಆಯ್ಕೆ' : '🖼️ Choose from Gallery', action: 'open_gallery' },
+        { label: isKn ? '❌ ರದ್ದುಮಾಡಿ' : '❌ Cancel', action: 'cancel_flow' }
+      ]
+    );
+  };
+
+  // 1. Start Product Creation - gives 2 distinct visible photo options
   const startProductCreation = () => {
     if (!user) {
       addAssistantMessage(
@@ -207,34 +261,55 @@ function HomePage() {
     addUserMessage(isKn ? "ನಾನು ಹೊಸ ಉತ್ಪನ್ನವನ್ನು ಸೇರಿಸಲು ಬಯಸುತ್ತೇನೆ." : "I want to add a new product.");
     addAssistantMessage(
       isKn
-        ? "ಉತ್ತಮ! ನಿಮ್ಮ ಕರಕುಶಲ ಉತ್ಪನ್ನವನ್ನು ಸೇರಿಸೋಣ. 📸\n\nದಯವಿಟ್ಟು ಕೆಳಗಿನ ಬಟನ್ ಅಥವಾ 📎 ಐಕಾನ್ ಬಳಸಿ **ಉತ್ಪನ್ನದ ಸ್ಪಷ್ಟ ಫೋಟೋವನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಅಥವಾ ತೆಗೆಯಿರಿ**."
-        : "Excellent! Let's get your craft listed. 📸\n\nPlease **upload or snap a clear photo** of your product using the button below or the 📎 attachment icon.",
-      [{ label: isKn ? '❌ ರದ್ದುಮಾಡಿ' : '❌ Cancel', action: 'cancel_flow' }]
+        ? "ಉತ್ತಮ! ನಿಮ್ಮ ಕರಕುಶಲ ಉತ್ಪನ್ನವನ್ನು ಸೇರಿಸೋಣ. 📸\n\nದಯವಿಟ್ಟು ಕೆಳಗಿನ ಆಯ್ಕೆ ಬಳಸಿ **ಕ್ಯಾಮೆರಾದಿಂದ ಫೋಟೋ ತೆಗೆಯಿರಿ** ಅಥವಾ **ಗ್ಯಾಲರಿಯಿಂದ ಫೋಟೋ ಆಯ್ಕೆಮಾಡಿ**:"
+        : "Excellent! Let's get your craft listed. 📸\n\nPlease choose an option below to **take a photo with your camera** or **choose from your gallery**:",
+      [
+        { label: isKn ? '📷 ಕ್ಯಾಮೆರಾದಿಂದ ಫೋಟೋ ತೆಗೆಯಿರಿ' : '📷 Take Photo (Camera)', action: 'open_camera' },
+        { label: isKn ? '🖼️ ಗ್ಯಾಲರಿಯಿಂದ ಆಯ್ಕೆಮಾಡಿ' : '🖼️ Choose from Gallery', action: 'open_gallery' },
+        { label: isKn ? '❌ ರದ್ದುಮಾಡಿ' : '❌ Cancel', action: 'cancel_flow' }
+      ]
     );
-
-    setTimeout(() => {
-      fileInputRef.current?.click();
-    }, 400);
   };
 
-  // 2. Photo picked
+  // 2. Photo picked via Camera or Gallery input
   const handlePhotoSelected = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
       addAssistantMessage(isKn ? "⚠️ ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ JPG, PNG, ಅಥವಾ WebP ಫೋಟೋವನ್ನು ಆಯ್ಕೆಮಾಡಿ." : "⚠️ Please pick a valid JPG, PNG, or WebP photo.");
+      e.target.value = '';
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       addAssistantMessage(isKn ? "⚠️ ಚಿತ್ರದ ಗಾತ್ರ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ (ಗರಿಷ್ಠ 5 MB). ದಯವಿಟ್ಟು ಸಣ್ಣ ಫೋಟೋ ಆಯ್ಕೆಮಾಡಿ." : "⚠️ Image size is too large (max 5 MB). Please choose a smaller photo.");
+      e.target.value = '';
       return;
+    }
+
+    if (pendingImagePreview) {
+      URL.revokeObjectURL(pendingImagePreview);
     }
 
     const preview = URL.createObjectURL(file);
     setPendingImageFile(file);
     setPendingImagePreview(preview);
+
+    // Reset input value to allow re-selecting same file if desired
+    e.target.value = '';
+
+    // If currently reviewing draft, update draft image
+    if (workflowState === 'reviewing_draft' && currentDraft) {
+      setCurrentDraft(prev => ({ ...prev, imageUrl: preview }));
+      setMessages(prev => prev.map(m => m.draft ? { ...m, draft: { ...m.draft, imageUrl: preview } } : m));
+      addUserMessage(isKn ? "ಉತ್ಪನ್ನದ ಹೊಸ ಫೋಟೋ ಬದಲಾಯಿಸಲಾಗಿದೆ" : "Updated product photo", {
+        type: 'image',
+        url: preview
+      });
+      addAssistantMessage(isKn ? "✅ ಫೋಟೋವನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ. ನೀವು ಈಗ ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಬಹುದು ಅಥವಾ ಉಳಿಸಬಹುದು." : "✅ Photo updated. You can now review or save the listing.");
+      return;
+    }
 
     addUserMessage(isKn ? "ಉತ್ಪನ್ನದ ಫೋಟೋ ನೀಡಲಾಗಿದೆ" : "Product photo captured", {
       type: 'image',
@@ -692,12 +767,23 @@ function HomePage() {
 
   return (
     <div className="chat-app">
-      {/* Hidden Mobile Camera / Gallery Picker */}
+      {/* Hidden Mobile Camera Input (rear camera on mobile) */}
       <input
         type="file"
-        ref={fileInputRef}
+        ref={cameraInputRef}
         accept="image/*"
         capture="environment"
+        id="camera-input"
+        onChange={handlePhotoSelected}
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden Mobile Gallery Input (photo library / files) */}
+      <input
+        type="file"
+        ref={galleryInputRef}
+        accept="image/*"
+        id="gallery-input"
         onChange={handlePhotoSelected}
         style={{ display: 'none' }}
       />
@@ -796,13 +882,49 @@ function HomePage() {
         </div>
       )}
 
+      {/* Pending Photo Banner above Composer */}
+      {pendingImagePreview && (
+        <div className="pending-photo-banner">
+          <div className="pending-photo-info">
+            <img
+              src={pendingImagePreview}
+              alt="Selected product preview"
+              className="pending-photo-thumb"
+            />
+            <div className="pending-photo-title">
+              {isKn ? '📸 ಫೋಟೋ ಲಗತ್ತಿಸಲಾಗಿದೆ' : '📸 Photo attached'}
+            </div>
+          </div>
+          <div className="pending-photo-actions">
+            <button
+              type="button"
+              className="btn-photo-action"
+              onClick={() => setShowPhotoPickerSheet(true)}
+              disabled={processing || isRecording}
+              title={isKn ? "ಫೋಟೋ ಬದಲಾಯಿಸಿ" : "Change photo"}
+            >
+              🔄 {isKn ? 'ಬದಲಾಯಿಸಿ' : 'Change'}
+            </button>
+            <button
+              type="button"
+              className="btn-photo-action remove"
+              onClick={removePendingPhoto}
+              disabled={processing || isRecording}
+              title={isKn ? "ಫೋಟೋ ತೆಗೆದುಹಾಕಿ" : "Remove photo"}
+            >
+              🗑️ {isKn ? 'ತೆಗೆದುಹಾಕಿ' : 'Remove'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Composer */}
       <footer className="chat-composer">
         <button
           className="attach-button"
           aria-label="Attach photo from camera or gallery"
-          title="Take photo or choose from gallery"
-          onClick={() => fileInputRef.current?.click()}
+          title={isKn ? "ಕ್ಯಾಮೆರಾ ಅಥವಾ ಗ್ಯಾಲರಿಯಿಂದ ಫೋಟೋ ಸೇರಿಸಿ" : "Take photo or choose from gallery"}
+          onClick={() => setShowPhotoPickerSheet(true)}
           disabled={processing || isRecording}
         >
           📎
@@ -842,6 +964,60 @@ function HomePage() {
           ✈️
         </button>
       </footer>
+
+      {/* Photo Picker Bottom Action Sheet (Camera vs Gallery Choice) */}
+      {showPhotoPickerSheet && (
+        <div
+          className="photo-sheet-backdrop"
+          onClick={() => setShowPhotoPickerSheet(false)}
+        >
+          <div
+            className="photo-sheet-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="photo-sheet-title">
+              {isKn ? '📸 ಉತ್ಪನ್ನದ ಫೋಟೋ ಸೇರಿಸಿ' : '📸 Add Product Photo'}
+            </h3>
+            <div className="photo-sheet-options">
+              <button
+                type="button"
+                className="photo-option-btn"
+                onClick={triggerCamera}
+                id="btn-choose-camera"
+              >
+                <span className="photo-option-icon">📷</span>
+                <div className="photo-option-text">
+                  <span>{isKn ? 'ಕ್ಯಾಮೆರಾದಿಂದ ಫೋಟೋ ತೆಗೆಯಿರಿ' : 'Take Photo (Camera)'}</span>
+                  <span className="photo-option-subtext">
+                    {isKn ? 'ಫೋನ್ ಹಿಂಬದಿಯ ಕ್ಯಾಮೆರಾ ಬಳಸಿ' : 'Use rear camera on mobile'}
+                  </span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="photo-option-btn"
+                onClick={triggerGallery}
+                id="btn-choose-gallery"
+              >
+                <span className="photo-option-icon">🖼️</span>
+                <div className="photo-option-text">
+                  <span>{isKn ? 'ಗ್ಯಾಲರಿಯಿಂದ ಆಯ್ಕೆಮಾಡಿ' : 'Choose from Gallery'}</span>
+                  <span className="photo-option-subtext">
+                    {isKn ? 'ಫೋನ್‌ನಲ್ಲಿರುವ ಫೋಟೋವನ್ನು ಆಯ್ಕೆಮಾಡಿ' : 'Select from photo library / files'}
+                  </span>
+                </div>
+              </button>
+            </div>
+            <button
+              type="button"
+              className="photo-sheet-cancel"
+              onClick={() => setShowPhotoPickerSheet(false)}
+            >
+              {isKn ? 'ರದ್ದುಮಾಡಿ' : 'Cancel'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
