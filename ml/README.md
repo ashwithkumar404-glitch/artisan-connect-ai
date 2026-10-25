@@ -1,55 +1,103 @@
-# Artisan Connect AI – ML Workspace (Phase 1)
+# Artisan Connect AI – ML Workspace
 
-This folder contains everything needed to **prepare** a product‑category dataset for a future machine‑learning model.
-
-## Directory layout
-- `ml/data/` – place for exported CSVs and the template file.
-- `ml/data/labeled_products_template.csv` – header‑only CSV you can fill with your exported rows.
-- `ml/data/README.md` – instructions on how to export the required fields from Supabase and map `category_id` → `categories.name`.
-- `ml/prepare_data.py` – script that validates a CSV, reports data‑quality issues and produces a clean copy for training.
-- `ml/requirements.txt` – Python dependencies required to run the validation script (currently only `pytest` for the test suite).
-- `ml/tests/` – pytest suite that checks the validation logic on synthetic fixtures.
-
-## Setup (project‑local virtual environment)
-```bash
-# From the repository root
-python -m venv .venv          # create a virtual environment in .venv
-.\.venv\Scripts\activate       # Windows activation
-pip install -r ml/requirements.txt
-```
-If the `requirements.txt` file is missing, install the only required package manually:
-```bash
-pip install pytest
-```
-
-## Validation script
-```bash
-python -m ml.prepare_data --input PATH/TO/input.csv [--output PATH/TO/clean.csv]
-```
-- Prints a **validation summary** (total rows, missing fields, duplicate rows, invalid `label_verified`, category counts, variants, and warnings).
-- If `--output` is supplied, a cleaned CSV containing only *eligible* rows is written. The original input file is never overwritten.
-
-## Cleaned CSV output
-`prepare_data.write_clean_csv(output_path, eligible_only=True)` writes a CSV with the same header as the input and only rows that:
-- Have non‑empty `name`, `description`, and `category`.
-- Are not exact duplicates.
-- Contain a valid `label_verified` value (`true/1/yes/y` → True, `false/0/no/n` → False).
-- Do not have the literal category `unknown`.
-
-## `label_verified` handling
-The column must contain one of the accepted truthy or falsy strings (case‑insensitive). Anything else is treated as **invalid** and the row is excluded.
-
-## Small or imbalanced dataset limitations
-The validator emits warnings when:
-- A category has fewer than **5** verified examples (recommended minimum for a usable classifier).
-- A single category dominates the eligible rows (> 70 % of eligible data).
-These warnings help you decide whether you need to collect more labeled data before proceeding to model training.
-
-## Running the test suite
-```bash
-python -m pytest -q ml/tests
-```
-All tests use synthetic CSV fixtures and should pass if the validator logic is unchanged.
+This folder contains the dataset auditing, human review, validation, and training pipeline for product-category classification.
 
 ---
-The ML workspace is **isolated** from the rest of the application: no code touches `frontend/` or the Supabase Edge Functions. All files live under `ml/` and can be added to `.gitignore` if you prefer to keep raw data out of version control.
+
+## Current Status
+- **Gemini & external AI**: Completely removed from all pipelines.
+- **Dataset verification**: The dataset currently contains **zero verified labels**.
+- **Model deployment**: No model is trained or deployed yet. Training is blocked until verified labels exist.
+- **Artisan creation workflow**: Upload photo -> voice description -> draft listing -> human review/save (completely preserved).
+
+---
+
+## Directory Layout
+- `ml/data/human_review_checklist.csv` – **Target file for human review and editing**. Preserves original values separately from human-approved corrections.
+- `ml/data/labeled_products_template.csv` – Template header for product imports.
+- `ml/audit_dataset.py` – Audits CSV datasets against quality rules, standard categories, and verification readiness.
+- `ml/prepare_data.py` – Validates, deduplicates, and prepares cleaned subsets for training.
+- `ml/train.py` – Trains a TF-IDF + Logistic Regression classifier on strictly verified, non-duplicate rows (blocked if zero verified rows or insufficient class counts exist).
+- `ml/tests/` – Comprehensive pytest suite covering validation, review workflow, duplicate handling, and training constraints.
+
+---
+
+## Human Review Workflow & Instructions
+
+The target file to review and edit is:
+`ml/data/human_review_checklist.csv`
+
+### Preserving Original Data
+The review CSV has separate columns for original metadata and human corrections:
+- `original_name`, `original_description`, `original_category`: **Never edit these columns**. They preserve raw data lineage.
+- `reviewed_name`, `reviewed_description`, `reviewed_category`: Reviewer fields for corrected values.
+- `verification_status`: Set to `True` only when a row is explicitly human-verified and ready for training. Default is `False`.
+- `flag` & `review_notes`: Contextual warnings and rationale for the reviewer.
+
+### Review Guidelines
+1. **Approving an already valid candidate** (e.g., Row 4, 6, 7, 8, 9, 10, 12, 13, 19, 20, 21, 22):
+   - Leave `reviewed_name`, `reviewed_description`, `reviewed_category` blank (the system will safely fall back to the original values).
+   - Set `verification_status` to `True`.
+2. **Correcting a record** (e.g., removing test prefix or reclassifying category):
+   - Row 5: Title has `'Test Bamboo Basket'`. Set `reviewed_name` to `Natural Bamboo Strip Basket`, and set `verification_status` to `True`.
+   - Row 23: Cotton bag currently under `'Other Handicrafts'`. Set `reviewed_category` to `Handloom & Textiles`, and set `verification_status` to `True`.
+   - Row 24: Bamboo basket under `'Other Handicrafts'`. Set `reviewed_category` to `Bamboo & Natural Craft`, and set `verification_status` to `True`.
+3. **Excluding an uninformative, duplicate, or uncertain record**:
+   - Rows 2, 3: Placeholder descriptions (`'it is good'`, `'it is very good'`). Keep `verification_status` as `False` (or set `reviewed_category` to `EXCLUDE`).
+   - Row 11: Non-standard category (`Home Decor`) with vague description. Keep `verification_status` as `False`.
+   - Rows 17, 18, 25: Exact duplicates. Keep `verification_status` as `False` (or set `reviewed_category` to `EXCLUDE`).
+   - Row 16: Uncertain category (wall art painting without clear material craft). Keep `verification_status` as `False`.
+
+---
+
+## Standard Marketplace Categories
+1. `Bamboo & Natural Craft`
+2. `Handloom & Textiles`
+3. `Pottery`
+4. `Wood Craft`
+5. `Metal Craft`
+6. `Jewellery`
+7. `Other Handicrafts`
+
+---
+
+## CLI Commands
+
+All commands are run from the project root (`artisan-connect-ai/`):
+
+### 1. Audit Dataset
+Audits the human review checklist against quality checks, standard categories, and verification status:
+```bash
+# Default: audits ml/data/human_review_checklist.csv against standard categories
+python -m ml.audit_dataset
+
+# Audit a specific CSV
+python -m ml.audit_dataset --input ml/data/human_review_checklist.csv
+
+# Output report in JSON format
+python -m ml.audit_dataset --json
+
+# Audit all CSVs in ml/data/
+python -m ml.audit_dataset --all
+```
+
+### 2. Prepare & Clean Dataset
+Validates the input CSV and writes a clean CSV with eligible records:
+```bash
+# Export all eligible rows (both verified and unverified)
+python -m ml.prepare_data --input ml/data/human_review_checklist.csv --output ml/data/clean_working.csv
+
+# Export strictly human-verified rows only (recommended for training preparation)
+python -m ml.prepare_data --input ml/data/human_review_checklist.csv --output ml/data/clean_verified.csv --verified-only
+```
+
+### 3. Train Model (Blocked until verified data exists)
+Attempts training on verified data; automatically enforces stratification requirements (at least 2 verified examples per category) and rejects duplicates:
+```bash
+python -m ml.train --input ml/data/clean_verified.csv --model-output ml/model/tfidf_lr.pkl
+```
+
+### 4. Run Test Suite
+```bash
+.\.venv\Scripts\python -m pytest ml/tests -v
+```

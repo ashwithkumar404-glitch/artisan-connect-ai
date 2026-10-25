@@ -136,3 +136,87 @@ def test_rejects_unallowed_category_when_specified(tmp_path):
     assert len(filtered) == 1
     assert filtered.iloc[0]["category"] == "A"
 
+
+def test_train_resolves_review_columns_overrides(tmp_path):
+    rows = [
+        {
+            "row_number": "1",
+            "original_name": "Test Bamboo Basket",
+            "reviewed_name": "Natural Bamboo Strip Basket",
+            "original_description": "Handmade bamboo basket created by a traditional artisan.",
+            "reviewed_description": "Exquisitely handwoven natural bamboo strips.",
+            "original_category": "Other Handicrafts",
+            "suggested_category": "Bamboo & Natural Craft",
+            "reviewed_category": "Bamboo & Natural Craft",
+            "verification_status": "True",
+            "flag": "AMBIGUOUS_TEST_TITLE",
+            "review_notes": "Reviewed and approved"
+        },
+        {
+            "row_number": "2",
+            "original_name": "Handmade Bamboo Basket",
+            "reviewed_name": "",
+            "original_description": "Handmade bamboo basket created by a traditional artisan.",
+            "reviewed_description": "",
+            "original_category": "Bamboo & Natural Craft",
+            "suggested_category": "Bamboo & Natural Craft",
+            "reviewed_category": "",
+            "verification_status": "True",
+            "flag": "VALID_CANDIDATE",
+            "review_notes": "Approved original values"
+        }
+    ]
+    df = pd.DataFrame(rows)
+    csv_path = tmp_path / "reviewed_workflow.csv"
+    df.to_csv(csv_path, index=False)
+
+    filtered = train._load_and_filter(csv_path)
+    assert len(filtered) == 2
+    # Row 1 overrides used
+    assert filtered.iloc[0]["name"] == "Natural Bamboo Strip Basket"
+    assert filtered.iloc[0]["description"] == "Exquisitely handwoven natural bamboo strips."
+    assert filtered.iloc[0]["category"] == "Bamboo & Natural Craft"
+    # Row 2 fallback used
+    assert filtered.iloc[1]["name"] == "Handmade Bamboo Basket"
+    assert filtered.iloc[1]["description"] == "Handmade bamboo basket created by a traditional artisan."
+    assert filtered.iloc[1]["category"] == "Bamboo & Natural Craft"
+
+
+def test_train_rejects_duplicate_verified_rows(tmp_path):
+    rows = [
+        {"name": "Basket", "description": "Handwoven basket.", "category": "Bamboo", "label_verified": "true"},
+        {"name": "Basket", "description": "Handwoven basket.", "category": "Bamboo", "label_verified": "true"},
+        {"name": "Pot", "description": "Clay cooking pot.", "category": "Pottery", "label_verified": "true"},
+    ]
+    df = pd.DataFrame(rows)
+    csv_path = tmp_path / "duplicates.csv"
+    df.to_csv(csv_path, index=False)
+
+    filtered = train._load_and_filter(csv_path)
+    assert len(filtered) == 2
+    names = filtered["name"].tolist()
+    assert names == ["Basket", "Pot"]
+
+
+def test_train_rejects_placeholder_text(tmp_path):
+    rows = [
+        {"name": "p1", "description": "placeholder", "category": "A", "label_verified": "true"},
+        {"name": "unknown", "description": "Valid description text", "category": "A", "label_verified": "true"},
+        {"name": "p3", "description": "Valid description text", "category": "A", "label_verified": "true"},
+    ]
+    df = pd.DataFrame(rows)
+    csv_path = tmp_path / "placeholders.csv"
+    df.to_csv(csv_path, index=False)
+
+    filtered = train._load_and_filter(csv_path)
+    assert len(filtered) == 1
+    assert filtered.iloc[0]["name"] == "p3"
+
+
+def test_train_blocks_actual_unverified_checklist():
+    actual_checklist = Path(__file__).resolve().parents[1] / "data" / "human_review_checklist.csv"
+    assert actual_checklist.is_file()
+    with pytest.raises(ValueError, match="No verified rows eligible for training found"):
+        train._load_and_filter(actual_checklist)
+
+

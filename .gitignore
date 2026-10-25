@@ -33,6 +33,9 @@ Thumbs.db
 supabase/.temp/
 supabase/.branches/
 
+# Scratch & temporary scripts
+scratch/
+
 # ML local data exports & models (local only)
 ml/data/*
 !ml/data/labeled_products_template.csv

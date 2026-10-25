@@ -187,3 +187,99 @@ def test_prepare_allowed_categories_filter(temp_csv):
     assert summary["eligible_rows"] == 1
     assert summary["invalid_category"] == 1
 
+
+def test_review_columns_override_original(temp_csv, tmp_path):
+    csv_content = (
+        "row_number,original_name,reviewed_name,original_description,reviewed_description,original_category,suggested_category,reviewed_category,verification_status,flag,review_notes\n"
+        "1,OrigName,RevName,OrigDesc,RevDesc,OrigCat,SuggCat,RevCat,True,VALID_CANDIDATE,Approved with corrections\n"
+    )
+    csv_path = temp_csv(csv_content)
+    Validator = load_validator(Path(__file__).parents[1] / "prepare_data.py")
+    validator = Validator(csv_path)
+    summary = validator.validate()
+    assert summary["total_rows"] == 1
+    assert summary["eligible_rows"] == 1
+    assert summary["verified_rows"] == 1
+    assert validator.rows[0]["name"] == "RevName"
+    assert validator.rows[0]["description"] == "RevDesc"
+    assert validator.rows[0]["category"] == "RevCat"
+
+    out_path = tmp_path / "clean_rev.csv"
+    validator.write_clean_csv(out_path, verified_only=True)
+    rows = list(csv.DictReader(out_path.open()))
+    assert len(rows) == 1
+    assert rows[0]["name"] == "RevName"
+    assert rows[0]["description"] == "RevDesc"
+    assert rows[0]["category"] == "RevCat"
+    assert rows[0]["label_verified"] == "True"
+
+
+def test_review_columns_fallback_to_original(temp_csv):
+    csv_content = (
+        "row_number,original_name,reviewed_name,original_description,reviewed_description,original_category,suggested_category,reviewed_category,verification_status,flag,review_notes\n"
+        "1,OrigName,,OrigDesc,,OrigCat,SuggCat,,True,VALID_CANDIDATE,Approved original values\n"
+    )
+    csv_path = temp_csv(csv_content)
+    Validator = load_validator(Path(__file__).parents[1] / "prepare_data.py")
+    validator = Validator(csv_path)
+    summary = validator.validate()
+    assert summary["eligible_rows"] == 1
+    assert summary["verified_rows"] == 1
+    assert validator.rows[0]["name"] == "OrigName"
+    assert validator.rows[0]["description"] == "OrigDesc"
+    assert validator.rows[0]["category"] == "OrigCat"
+
+
+def test_review_exclusion_sentinels(temp_csv):
+    csv_content = (
+        "row_number,original_name,reviewed_name,original_description,reviewed_description,original_category,suggested_category,reviewed_category,verification_status,flag,review_notes\n"
+        "1,Prod1,,Desc1,,Bamboo & Natural Craft,,CANNOT_DETERMINE,True,REJECT,Excluded by reviewer\n"
+        "2,Prod2,,Desc2,,Bamboo & Natural Craft,,EXCLUDE,True,REJECT,Excluded by reviewer\n"
+    )
+    csv_path = temp_csv(csv_content)
+    Validator = load_validator(Path(__file__).parents[1] / "prepare_data.py")
+    validator = Validator(csv_path)
+    summary = validator.validate()
+    assert summary["invalid_category"] == 2
+    assert summary["eligible_rows"] == 0
+    assert summary["verified_rows"] == 0
+
+
+def test_case_insensitive_duplicate_detection(temp_csv):
+    csv_content = (
+        "name,description,category,source,label_verified\n"
+        "Bamboo Basket,Traditional craft weave.,Bamboo & Natural Craft,web,True\n"
+        "  bamboo basket  ,  TRADITIONAL CRAFT WEAVE.  ,  bamboo & natural craft  ,web,True\n"
+    )
+    csv_path = temp_csv(csv_content)
+    Validator = load_validator(Path(__file__).parents[1] / "prepare_data.py")
+    validator = Validator(csv_path)
+    summary = validator.validate()
+    assert summary["duplicate_rows"] == 1
+    assert summary["eligible_rows"] == 1
+    assert summary["verified_rows"] == 1
+    assert summary["excluded_row_indices"] == [1]
+
+
+def test_rejection_of_unverified_records(temp_csv, tmp_path):
+    csv_content = (
+        "name,description,category,source,label_verified\n"
+        "p1,d1,CatA,web,False\n"
+        "p2,d2,CatA,web,0\n"
+        "p3,d3,CatA,web,no\n"
+        "p4,d4,CatA,web,pending\n"
+    )
+    csv_path = temp_csv(csv_content)
+    Validator = load_validator(Path(__file__).parents[1] / "prepare_data.py")
+    validator = Validator(csv_path)
+    summary = validator.validate()
+    assert summary["verified_rows"] == 0
+    assert summary["unverified_rows"] == 3
+    assert summary["invalid_label_verified"] == 1  # 'pending' is invalid boolean
+
+    out_path = tmp_path / "clean_empty.csv"
+    validator.write_clean_csv(out_path, verified_only=True)
+    rows = list(csv.DictReader(out_path.open()))
+    assert len(rows) == 0
+
+

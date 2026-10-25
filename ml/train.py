@@ -51,7 +51,14 @@ FALSE_VALUES = {"false", "0", "no", "n"}
 # Invalid category placeholders and sentinel values
 INVALID_CATEGORY_VALUES = {
     "", "unknown", "null", "none", "n/a", "na", "undefined",
-    "unspecified", "cannot_determine", "placeholder", "nan", "nil"
+    "unspecified", "cannot_determine", "placeholder", "nan", "nil",
+    "exclude", "excluded", "reject", "rejected", "discard", "discarded",
+    "invalid", "unverified"
+}
+
+# Invalid text placeholders and sentinels for name and description
+INVALID_TEXT_VALUES = {
+    "", "unknown", "null", "none", "n/a", "na", "undefined", "placeholder", "nan", "nil"
 }
 
 STANDARD_MARKETPLACE_CATEGORIES = {
@@ -87,18 +94,58 @@ def _parse_label_verified(value: str) -> Tuple[bool, bool, str]:
 
 
 def _load_and_filter(csv_path: Path, allowed_categories: List[str] | None = None) -> pd.DataFrame:
-    df = pd.read_csv(csv_path, dtype=str)
+    df = pd.read_csv(csv_path, dtype=str, encoding="utf-8-sig")
     
-    # Handle column aliases gracefully
+    # Handle review workflow columns and standard aliases
     col_map = {col.strip().lower(): col for col in df.columns}
-    if "category" not in df.columns and "current_category" in col_map:
-        df["category"] = df[col_map["current_category"]]
-    if "label_verified" not in df.columns and "verification_status" in col_map:
+    
+    # Resolve name: reviewed_name > original_name > product_name > name
+    candidates_name = []
+    if "reviewed_name" in col_map:
+        candidates_name.append(df[col_map["reviewed_name"]].fillna("").astype(str).str.strip())
+    for col_key in ("original_name", "product_name", "name"):
+        if col_key in col_map:
+            candidates_name.append(df[col_map[col_key]].fillna("").astype(str).str.strip())
+            break
+    if candidates_name:
+        resolved = candidates_name[0]
+        for c in candidates_name[1:]:
+            resolved = resolved.where(resolved != "", c)
+        df["name"] = resolved
+
+    # Resolve description: reviewed_description > original_description > product_description > description
+    candidates_desc = []
+    if "reviewed_description" in col_map:
+        candidates_desc.append(df[col_map["reviewed_description"]].fillna("").astype(str).str.strip())
+    for col_key in ("original_description", "product_description", "description"):
+        if col_key in col_map:
+            candidates_desc.append(df[col_map[col_key]].fillna("").astype(str).str.strip())
+            break
+    if candidates_desc:
+        resolved = candidates_desc[0]
+        for c in candidates_desc[1:]:
+            resolved = resolved.where(resolved != "", c)
+        df["description"] = resolved
+
+    # Resolve category: reviewed_category > original_category > current_category > category
+    candidates_cat = []
+    if "reviewed_category" in col_map:
+        candidates_cat.append(df[col_map["reviewed_category"]].fillna("").astype(str).str.strip())
+    for col_key in ("original_category", "current_category", "category"):
+        if col_key in col_map:
+            candidates_cat.append(df[col_map[col_key]].fillna("").astype(str).str.strip())
+            break
+    if candidates_cat:
+        resolved = candidates_cat[0]
+        for c in candidates_cat[1:]:
+            resolved = resolved.where(resolved != "", c)
+        df["category"] = resolved
+
+    # Resolve label_verified: label_verified / verification_status
+    if "label_verified" in col_map:
+        df["label_verified"] = df[col_map["label_verified"]]
+    elif "verification_status" in col_map:
         df["label_verified"] = df[col_map["verification_status"]]
-    if "name" not in df.columns and "product_name" in col_map:
-        df["name"] = df[col_map["product_name"]]
-    if "description" not in df.columns and "product_description" in col_map:
-        df["description"] = df[col_map["product_description"]]
 
     # Ensure required columns exist
     required = {"name", "description", "category", "label_verified"}
@@ -108,10 +155,15 @@ def _load_and_filter(csv_path: Path, allowed_categories: List[str] | None = None
 
     total_rows = len(df)
 
-    # 1. Reject missing or empty name / description
+    # 1. Reject missing or empty or placeholder name / description
     name_clean = df["name"].fillna("").astype(str).str.strip()
     desc_clean = df["description"].fillna("").astype(str).str.strip()
-    missing_text_mask = (name_clean == "") | (desc_clean == "")
+    missing_text_mask = (
+        (name_clean == "")
+        | (desc_clean == "")
+        | (name_clean.str.lower().isin(INVALID_TEXT_VALUES))
+        | (desc_clean.str.lower().isin(INVALID_TEXT_VALUES))
+    )
 
     # 2. Reject invalid category values (empty, placeholders, sentinels, or outside allowed set)
     cat_clean = df["category"].fillna("").astype(str).str.strip()
@@ -129,13 +181,21 @@ def _load_and_filter(csv_path: Path, allowed_categories: List[str] | None = None
 
     unverified_mask = (~df["_lv_valid"]) | (~df["_lv_true"])
 
+    # 4. Reject duplicate rows (case-insensitive name, description, category)
+    norm_name = df["name"].fillna("").astype(str).str.strip().str.lower()
+    norm_desc = df["description"].fillna("").astype(str).str.strip().str.lower()
+    norm_cat = df["category"].fillna("").astype(str).str.strip().str.lower()
+    temp_comb = pd.DataFrame({"_n": norm_name, "_d": norm_desc, "_c": norm_cat}, index=df.index)
+    dup_mask = temp_comb.duplicated(subset=["_n", "_d", "_c"], keep="first")
+
     # Summary of exclusions
     num_missing_text = int(missing_text_mask.sum())
     num_invalid_cat = int(invalid_cat_mask.sum())
     num_unverified = int(unverified_mask.sum())
+    num_duplicates = int(dup_mask.sum())
 
-    # Keep only rows where text is valid, category is valid, AND label is strictly verified
-    valid_mask = (~missing_text_mask) & (~invalid_cat_mask) & (~unverified_mask)
+    # Keep only rows where text is valid, category is valid, label is strictly verified, and not duplicate
+    valid_mask = (~missing_text_mask) & (~invalid_cat_mask) & (~unverified_mask) & (~dup_mask)
     verified = df[valid_mask].copy()
 
     print(f"Dataset pre-training validation for '{csv_path.name}':")
@@ -143,13 +203,15 @@ def _load_and_filter(csv_path: Path, allowed_categories: List[str] | None = None
     print(f"  Rejected unverified rows: {num_unverified}")
     print(f"  Rejected invalid category: {num_invalid_cat}")
     print(f"  Rejected missing text   : {num_missing_text}")
+    print(f"  Rejected duplicate rows : {num_duplicates}")
     print(f"  Eligible verified rows  : {len(verified)}")
 
     if verified.empty:
         raise ValueError(
             f"No verified rows eligible for training found in '{csv_path.name}'. "
             f"All {total_rows} rows were rejected (unverified={num_unverified}, "
-            f"invalid_cat={num_invalid_cat}, missing_text={num_missing_text}). "
+            f"invalid_cat={num_invalid_cat}, missing_text={num_missing_text}, "
+            f"duplicates={num_duplicates}). "
             f"Labels must be reviewed and verified by a human before model training."
         )
 

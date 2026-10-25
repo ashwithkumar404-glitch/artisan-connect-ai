@@ -34,7 +34,14 @@ _REQUIRED_COLUMNS = ["name", "description", "category", "source", "label_verifie
 # Invalid category placeholders and sentinel values
 INVALID_CATEGORY_VALUES = {
     "", "unknown", "null", "none", "n/a", "na", "undefined",
-    "unspecified", "cannot_determine", "placeholder", "nan", "nil"
+    "unspecified", "cannot_determine", "placeholder", "nan", "nil",
+    "exclude", "excluded", "reject", "rejected", "discard", "discarded",
+    "invalid", "unverified"
+}
+
+# Invalid text placeholders and sentinels for name and description
+INVALID_TEXT_VALUES = {
+    "", "unknown", "null", "none", "n/a", "na", "undefined", "placeholder", "nan", "nil"
 }
 
 # Standard marketplace categories for Artisan Connect AI
@@ -75,54 +82,106 @@ class DatasetValidator:
     def _load(self) -> None:
         if not self.input_path.is_file():
             raise FileNotFoundError(f"Input file '{self.input_path}' does not exist")
-        with self.input_path.open(newline="", encoding="utf-8") as f:
+        with self.input_path.open(newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             raw_header = reader.fieldnames or []
             if not raw_header:
                 raise ValueError("CSV file has no header row")
             
-            # Support common column aliases while preserving original header
+            # Support separate review/original columns and standard aliases
             col_map = {}
             for col in raw_header:
                 col_lower = col.strip().lower()
-                if col_lower in {"category", "current_category"}:
+                if col_lower == "reviewed_category":
+                    col_map["reviewed_category"] = col
+                elif col_lower in {"original_category", "current_category"}:
+                    col_map["original_category"] = col
+                elif col_lower == "category":
                     col_map["category"] = col
-                elif col_lower in {"label_verified", "verification_status"}:
-                    col_map["label_verified"] = col
-                elif col_lower in {"name", "product_name"}:
+
+                if col_lower == "reviewed_name":
+                    col_map["reviewed_name"] = col
+                elif col_lower in {"original_name", "product_name"}:
+                    col_map["original_name"] = col
+                elif col_lower == "name":
                     col_map["name"] = col
-                elif col_lower in {"description", "product_description"}:
+
+                if col_lower == "reviewed_description":
+                    col_map["reviewed_description"] = col
+                elif col_lower in {"original_description", "product_description"}:
+                    col_map["original_description"] = col
+                elif col_lower == "description":
                     col_map["description"] = col
+
+                if col_lower in {"label_verified", "verification_status"}:
+                    col_map["label_verified"] = col
                 elif col_lower in {"source"}:
                     col_map["source"] = col
 
             self.header = list(raw_header)
             for row in reader:
                 cleaned_row = {k: (v or "").strip() for k, v in row.items()}
-                # Ensure standard keys are populated if aliases were used
-                if "category" not in cleaned_row and "category" in col_map:
-                    cleaned_row["category"] = cleaned_row.get(col_map["category"], "")
-                if "label_verified" not in cleaned_row and "label_verified" in col_map:
-                    cleaned_row["label_verified"] = cleaned_row.get(col_map["label_verified"], "")
-                if "source" not in cleaned_row and "source" in col_map:
-                    cleaned_row["source"] = cleaned_row.get(col_map["source"], "")
-                elif "source" not in cleaned_row:
-                    cleaned_row["source"] = "dataset_export"
+                
+                # Resolve name: reviewed_name > original_name > name
+                name = ""
+                if "reviewed_name" in col_map and row.get(col_map["reviewed_name"], "").strip():
+                    name = row[col_map["reviewed_name"]].strip()
+                elif "original_name" in col_map and row.get(col_map["original_name"], "").strip():
+                    name = row[col_map["original_name"]].strip()
+                elif "name" in col_map and row.get(col_map["name"], "").strip():
+                    name = row[col_map["name"]].strip()
+
+                # Resolve description: reviewed_description > original_description > description
+                description = ""
+                if "reviewed_description" in col_map and row.get(col_map["reviewed_description"], "").strip():
+                    description = row[col_map["reviewed_description"]].strip()
+                elif "original_description" in col_map and row.get(col_map["original_description"], "").strip():
+                    description = row[col_map["original_description"]].strip()
+                elif "description" in col_map and row.get(col_map["description"], "").strip():
+                    description = row[col_map["description"]].strip()
+
+                # Resolve category: reviewed_category > original_category > category
+                category = ""
+                if "reviewed_category" in col_map and row.get(col_map["reviewed_category"], "").strip():
+                    category = row[col_map["reviewed_category"]].strip()
+                elif "original_category" in col_map and row.get(col_map["original_category"], "").strip():
+                    category = row[col_map["original_category"]].strip()
+                elif "category" in col_map and row.get(col_map["category"], "").strip():
+                    category = row[col_map["category"]].strip()
+
+                # Resolve label_verified
+                label_verified = ""
+                if "label_verified" in col_map:
+                    label_verified = row.get(col_map["label_verified"], "").strip()
+
+                # Resolve source
+                source = "dataset_export"
+                if "source" in col_map and row.get(col_map["source"], "").strip():
+                    source = row[col_map["source"]].strip()
+
+                cleaned_row["name"] = name
+                cleaned_row["description"] = description
+                cleaned_row["category"] = category
+                cleaned_row["label_verified"] = label_verified
+                cleaned_row["source"] = source
                 self.rows.append(cleaned_row)
 
         # Check required columns
-        present_virtual_cols = set(self.header)
-        if "category" in col_map:
-            present_virtual_cols.add("category")
-        if "label_verified" in col_map:
-            present_virtual_cols.add("label_verified")
-        if "name" in col_map:
-            present_virtual_cols.add("name")
-        if "description" in col_map:
-            present_virtual_cols.add("description")
-        present_virtual_cols.add("source")  # Defaulted if missing
+        has_name = any(k in col_map for k in ("reviewed_name", "original_name", "name"))
+        has_desc = any(k in col_map for k in ("reviewed_description", "original_description", "description"))
+        has_cat = any(k in col_map for k in ("reviewed_category", "original_category", "category"))
+        has_lv = "label_verified" in col_map
 
-        missing = [c for c in _REQUIRED_COLUMNS if c not in present_virtual_cols]
+        missing = []
+        if not has_name:
+            missing.append("name")
+        if not has_desc:
+            missing.append("description")
+        if not has_cat:
+            missing.append("category")
+        if not has_lv:
+            missing.append("label_verified")
+
         if missing:
             raise ValueError(f"Missing required column(s): {', '.join(missing)}")
 
@@ -130,8 +189,12 @@ class DatasetValidator:
         seen: Set[Tuple[str, str, str]] = set()
         dup: Set[int] = set()
         for i, row in enumerate(self.rows):
-            # Key based on core content: name, description, category
-            key = (row.get("name", "").strip(), row.get("description", "").strip(), row.get("category", "").strip())
+            # Key based on core content: name, description, category (case-insensitive)
+            key = (
+                row.get("name", "").strip().lower(),
+                row.get("description", "").strip().lower(),
+                row.get("category", "").strip().lower()
+            )
             if key in seen:
                 dup.add(i)
             else:
@@ -141,8 +204,14 @@ class DatasetValidator:
     def _analyse(self) -> Dict:
         total = len(self.rows)
         excluded: Set[int] = set()
-        missing_name = {i for i, r in enumerate(self.rows) if not r.get("name")}
-        missing_desc = {i for i, r in enumerate(self.rows) if not r.get("description")}
+        missing_name = {
+            i for i, r in enumerate(self.rows)
+            if not r.get("name") or _norm(r.get("name", "")) in INVALID_TEXT_VALUES
+        }
+        missing_desc = {
+            i for i, r in enumerate(self.rows)
+            if not r.get("description") or _norm(r.get("description", "")) in INVALID_TEXT_VALUES
+        }
         missing_cat = {i for i, r in enumerate(self.rows) if not r.get("category")}
         excluded.update(missing_name | missing_desc | missing_cat)
 
