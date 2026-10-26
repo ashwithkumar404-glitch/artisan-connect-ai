@@ -1,24 +1,30 @@
-// Deno Serverless Edge Function for Artisan Connect AI Product Voice Transcription and Translation
-import { generateGeminiContent } from '../_shared/gemini.ts';
+// Deno Serverless Edge Function for Artisan Connect AI Product Voice Transcription
+// Supports Kannada Unicode and English audio transcription via Gemini or Whisper when configured.
+// Zero frontend secret leakage; handles missing configuration gracefully with 503.
 
-// Access-Control CORS headers for cross-origin resource requests
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // Handle CORS preflight options check
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // 1. Deno environment key checks are now managed by the shared helper.
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: 'Only POST requests are supported.' }),
+        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
+    // Parse request JSON parameters
+    const body = await req.json();
+    const { audio, mimeType = 'audio/webm', language = 'kn' } = body;
 
-    // 2. Parse request JSON parameters
-    const { audio, mimeType } = await req.json();
     if (!audio) {
       return new Response(
         JSON.stringify({ error: 'Audio data is missing from the payload.' }),
@@ -26,108 +32,121 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Clean MIME type (remove codecs parameter which causes Gemini API error)
-    let cleanMimeType = (mimeType || 'audio/webm').split(';')[0].trim();
-    if (cleanMimeType === 'audio/x-m4a') {
-      cleanMimeType = 'audio/mp4';
-    }
+    // Check available server-side environment secrets
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    const openAiApiKey = Deno.env.get('OPENAI_API_KEY');
+    const groqApiKey = Deno.env.get('GROQ_API_KEY');
 
-    console.log("Original audio MIME type:", mimeType);
-    console.log("Cleaned audio MIME type for Gemini:", cleanMimeType);
-    console.log("Audio payload base64 size (approx):", Math.round(audio.length / 1024) + " KB");
+    // 1. Try Gemini API if configured (Supports Kannada multimodal audio natively)
+    if (geminiApiKey) {
+      try {
+        const promptText = language === 'kn'
+          ? 'You are an accurate speech-to-text transcriber for rural Indian artisans. Transcribe this audio recording into pure Kannada Unicode script (ಕನ್ನಡ ಲಿಪಿ). Do NOT transliterate to Latin/English letters. Transcribe only what the artisan said, without quotes, introductory text, explanations, or translation.'
+          : 'You are an accurate speech-to-text transcriber for Indian artisans. Transcribe this audio recording into English text accurately. Transcribe only what was said, without commentary or quotes.';
 
-    // 3. Configure Gemini Multimodal Prompt and Payload
-    const promptText = `You are assisting traditional Indian artisans.
+        const cleanBase64 = audio.includes(',') ? audio.split(',')[1] : audio;
+        const normalizedMime = mimeType.split(';')[0] || 'audio/webm';
 
-Listen carefully to the attached audio.
-
-Identify the language being spoken.
-Transcribe the speech accurately in the original language.
-Then translate the meaning into natural English.
-
-The speech may describe:
-- what the artisan made
-- materials used
-- traditional techniques
-- product purpose
-- size
-- color
-- cultural information
-- craftsmanship
-- other product details
-
-Do not invent information that was not spoken.
-
-Return ONLY a valid JSON object matching the following structure:
-{
-  "detected_language": "...",
-  "transcript": "...",
-  "english_translation": "...",
-  "confidence": "high" | "medium" | "low"
-}
-
-Preserve the artisan's meaning. Do not add marketing claims that were not spoken. Do not wrap in markdown code blocks.`;
-
-    const apiBody = {
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            {
-              inlineData: {
-                mimeType: cleanMimeType,
-                data: audio,
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: promptText },
+                  {
+                    inlineData: {
+                      mimeType: normalizedMime,
+                      data: cleanBase64,
+                    },
+                  },
+                ],
               },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 1000,
             },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-      },
-    };
+          }),
+        });
 
-    console.log("Sending audio request to Google Gemini API...");
-    
-    // 4. Send request using shared helper
-    const resJson = await generateGeminiContent(apiBody);
-    const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!textResult) {
-      console.error("Gemini completion is empty.");
-      throw new Error('Gemini API returned an empty completion.');
+        if (geminiRes.ok) {
+          const geminiData = await geminiRes.json();
+          const candidateText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+          if (candidateText) {
+            return new Response(
+              JSON.stringify({ transcript: candidateText, language, provider: 'gemini' }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } else {
+          console.warn('Gemini audio transcription API returned error:', await geminiRes.text());
+        }
+      } catch (geminiErr) {
+        console.warn('Gemini transcription attempt failed:', geminiErr);
+      }
     }
 
-    console.log("Raw Gemini completion text:", textResult.trim());
+    // 2. Try OpenAI or Groq Whisper API if configured
+    const whisperKey = openAiApiKey || groqApiKey;
+    const whisperEndpoint = openAiApiKey
+      ? 'https://api.openai.com/v1/audio/transcriptions'
+      : 'https://api.groq.com/openai/v1/audio/transcriptions';
+    const whisperModel = openAiApiKey ? 'whisper-1' : 'whisper-large-v3';
 
-    // Clean markdown wrappers if any
-    let cleanedText = textResult.trim();
-    if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '');
-      cleanedText = cleanedText.replace(/\n?```$/, '');
-      cleanedText = cleanedText.trim();
+    if (whisperKey) {
+      try {
+        const cleanBase64 = audio.includes(',') ? audio.split(',')[1] : audio;
+        const binaryStr = atob(cleanBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+
+        const formData = new FormData();
+        const audioBlob = new Blob([bytes], { type: mimeType });
+        formData.append('file', audioBlob, 'recording.webm');
+        formData.append('model', whisperModel);
+        formData.append('language', language === 'kn' ? 'kn' : 'en');
+        if (language === 'kn') {
+          formData.append('prompt', 'ಕನ್ನಡ ಭಾಷೆಯಲ್ಲಿ ಕರಕುಶಲ ಉತ್ಪನ್ನದ ವಿವರಣೆ.');
+        }
+
+        const whisperRes = await fetch(whisperEndpoint, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${whisperKey}` },
+          body: formData,
+        });
+
+        if (whisperRes.ok) {
+          const whisperData = await whisperRes.json();
+          const transcript = whisperData.text?.trim() || '';
+          if (transcript) {
+            return new Response(
+              JSON.stringify({ transcript, language, provider: openAiApiKey ? 'openai' : 'groq' }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } else {
+          console.warn('Whisper API returned error:', await whisperRes.text());
+        }
+      } catch (whisperErr) {
+        console.warn('Whisper transcription attempt failed:', whisperErr);
+      }
     }
 
-    // Verify correct JSON syntax before returning
-    const parsedData = JSON.parse(cleanedText);
-    console.log("Successfully parsed JSON response:", parsedData);
-
+    // 3. Fallback when no transcription provider is configured on server
     return new Response(
-      JSON.stringify(parsedData),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        error: 'Backend speech-to-text is not configured on this server (GEMINI_API_KEY or OPENAI_API_KEY required in Supabase secrets).',
+        configured: false,
+      }),
+      { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
     console.error('Error in transcribe-voice function:', error);
-    if (error.message === 'AI_QUOTA_EXHAUSTED') {
-      return new Response(
-        JSON.stringify({
-          code: 'AI_QUOTA_EXHAUSTED',
-          message: 'AI service is temporarily unavailable. Please try again shortly.'
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

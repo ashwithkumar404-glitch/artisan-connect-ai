@@ -2091,7 +2091,7 @@ export default function EditProduct() {
                 <h4 className="font-bold text-gov-navy m-0 text-sm">Describe Handicraft by Voice</h4>
               </div>
               <p className="text-xs text-slate-550 leading-relaxed">
-                Describe your handicraft by speaking in your local language (e.g. Kannada, Hindi, English). Gemini will automatically transcribe and translate it into English.
+                Describe your handicraft by speaking in your local language (e.g. Kannada, Hindi, English). The voice assistant will transcribe and translate it into English.
               </p>
 
               {!isRecording && !audioUrl && (
