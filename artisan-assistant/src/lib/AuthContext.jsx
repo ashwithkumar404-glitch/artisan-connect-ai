@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
 const AuthContext = createContext({});
@@ -9,14 +9,28 @@ export function AuthProvider({ children }) {
   const [artisan, setArtisan] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const lastFetchedUserIdRef = useRef(null);
+
   const fetchUserData = async (userId) => {
     try {
-      // 1. Fetch user profile
-      const { data: profData, error: profErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      lastFetchedUserIdRef.current = userId;
+
+      // Parallelize profile and artisan record lookups
+      const [
+        { data: profData, error: profErr },
+        { data: artData, error: artErr }
+      ] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle(),
+        supabase
+          .from('artisans')
+          .select('*')
+          .eq('profile_id', userId)
+          .maybeSingle()
+      ]);
 
       if (profErr) {
         console.error('Error fetching user profile:', profErr.message);
@@ -24,13 +38,6 @@ export function AuthProvider({ children }) {
       } else {
         setProfile(profData);
       }
-
-      // 2. Fetch artisan record
-      const { data: artData, error: artErr } = await supabase
-        .from('artisans')
-        .select('*')
-        .eq('profile_id', userId)
-        .maybeSingle();
 
       if (artErr) {
         console.error('Error fetching artisan record:', artErr.message);
@@ -48,27 +55,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        setUser(session.user);
-        fetchUserData(session.user.id).then(() => {
-          if (mounted) setLoading(false);
-        });
-      } else {
-        setUser(null);
-        setProfile(null);
-        setArtisan(null);
-        setLoading(false);
-      }
-    });
-
+    // Listen to auth state transitions
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
       if (session?.user) {
         setUser(session.user);
-        await fetchUserData(session.user.id);
+        // Only fetch if not already loaded for this user ID
+        if (lastFetchedUserIdRef.current !== session.user.id) {
+          await fetchUserData(session.user.id);
+        }
       } else {
+        lastFetchedUserIdRef.current = null;
         setUser(null);
         setProfile(null);
         setArtisan(null);

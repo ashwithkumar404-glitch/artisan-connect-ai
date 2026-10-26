@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 function MyProductsPage() {
   const navigate = useNavigate();
@@ -23,11 +24,12 @@ function MyProductsPage() {
       setLoading(true);
       setErrorMsg('');
 
-      const { data, error } = await supabase
+      let res = await supabase
         .from('products')
         .select(`
           id,
           name,
+          local_title,
           price,
           status,
           stock_quantity,
@@ -39,8 +41,27 @@ function MyProductsPage() {
         .eq('artisan_id', artisan.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setProducts(data || []);
+      // Fallback if local_title column is not yet present on remote DB
+      if (res.error && res.error.message?.includes('local_title')) {
+        res = await supabase
+          .from('products')
+          .select(`
+            id,
+            name,
+            price,
+            status,
+            stock_quantity,
+            created_at,
+            category_id,
+            categories (name),
+            product_images (image_url)
+          `)
+          .eq('artisan_id', artisan.id)
+          .order('created_at', { ascending: false });
+      }
+
+      if (res.error) throw res.error;
+      setProducts(res.data || []);
     } catch (err) {
       console.error('Error fetching artisan products:', err);
       setErrorMsg('Failed to load your products.');
@@ -131,19 +152,22 @@ function MyProductsPage() {
   }
 
   return (
-    <div style={{ maxWidth: '480px', margin: '0 auto', padding: '1rem', fontFamily: 'inherit' }}>
+    <div style={{ maxWidth: '480px', margin: '0 auto', padding: '1rem', fontFamily: 'inherit', color: 'var(--text)' }}>
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid #e0e0e0', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Link to="/" style={{ textDecoration: 'none', fontSize: '1.25rem', color: '#075E54' }}>←</Link>
-          <h1 style={{ fontSize: '1.25rem', margin: 0, color: '#075E54' }}>My Products</h1>
+          <Link to="/" style={{ textDecoration: 'none', fontSize: '1.25rem', color: 'var(--primary-green)' }}>←</Link>
+          <h1 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--primary-green)' }}>My Products</h1>
         </div>
-        <Link
-          to="/add-product"
-          style={{ padding: '0.4rem 0.8rem', background: '#075E54', color: 'white', textDecoration: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600 }}
-        >
-          + Add New
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ThemeToggle />
+          <Link
+            to="/add-product"
+            style={{ padding: '0.4rem 0.8rem', background: 'var(--primary-green)', color: 'white', textDecoration: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600 }}
+          >
+            + Add New
+          </Link>
+        </div>
       </div>
 
       {statusMsg && (
@@ -159,13 +183,13 @@ function MyProductsPage() {
       )}
 
       {loading ? (
-        <p style={{ textAlign: 'center', color: '#666' }}>Loading catalog...</p>
+        <p style={{ textAlign: 'center', color: 'var(--secondary-text)' }}>Loading catalog...</p>
       ) : products.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem', background: '#f9f9f9', borderRadius: '8px' }}>
-          <p style={{ color: '#666' }}>You have not added any products yet.</p>
+        <div style={{ textAlign: 'center', padding: '2rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+          <p style={{ color: 'var(--secondary-text)' }}>You have not added any products yet.</p>
           <Link
             to="/add-product"
-            style={{ display: 'inline-block', marginTop: '0.5rem', padding: '0.6rem 1.2rem', background: '#128C7E', color: 'white', textDecoration: 'none', borderRadius: '6px' }}
+            style={{ display: 'inline-block', marginTop: '0.5rem', padding: '0.6rem 1.2rem', background: 'var(--primary-green)', color: 'white', textDecoration: 'none', borderRadius: '6px' }}
           >
             Create Your First Product
           </Link>
@@ -176,6 +200,8 @@ function MyProductsPage() {
             const imgUrl = prod.product_images?.[0]?.image_url;
             const isPub = prod.status === 'published';
             const isBusy = actionLoadingId === prod.id;
+            const titleDisplay = prod.local_title || prod.name;
+            const englishSubtitle = prod.local_title && prod.name && prod.local_title !== prod.name ? prod.name : null;
 
             return (
               <div
@@ -184,20 +210,21 @@ function MyProductsPage() {
                   display: 'flex',
                   gap: '0.75rem',
                   padding: '0.75rem',
-                  background: 'white',
+                  background: 'var(--bg)',
                   borderRadius: '8px',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                  border: '1px solid #eee'
+                  border: '1px solid var(--border)',
+                  color: 'var(--text)'
                 }}
               >
                 {imgUrl ? (
                   <img
                     src={imgUrl}
-                    alt={prod.name}
+                    alt={titleDisplay}
                     style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px' }}
                   />
                 ) : (
-                  <div style={{ width: '80px', height: '80px', background: '#eee', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '0.75rem' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--border)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--secondary-text)', fontSize: '0.75rem' }}>
                     No Photo
                   </div>
                 )}
@@ -205,16 +232,21 @@ function MyProductsPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {prod.name}
+                      {titleDisplay}
                     </h3>
                   </div>
+                  {englishSubtitle && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--secondary-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      ({englishSubtitle})
+                    </div>
+                  )}
 
-                  <p style={{ margin: '0.2rem 0', fontSize: '0.8rem', color: '#666' }}>
+                  <p style={{ margin: '0.2rem 0', fontSize: '0.8rem', color: 'var(--secondary-text)' }}>
                     {prod.categories?.name || 'Handicraft'}
                   </p>
 
-                  <p style={{ margin: '0.2rem 0', fontWeight: 600, color: '#075E54', fontSize: '0.9rem' }}>
-                    ₹{prod.price} <span style={{ fontWeight: 'normal', color: '#666', fontSize: '0.75rem' }}>({prod.stock_quantity} in stock)</span>
+                  <p style={{ margin: '0.2rem 0', fontWeight: 600, color: 'var(--primary-green)', fontSize: '0.9rem' }}>
+                    ₹{prod.price} <span style={{ fontWeight: 'normal', color: 'var(--secondary-text)', fontSize: '0.75rem' }}>({prod.stock_quantity} in stock)</span>
                   </p>
 
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', alignItems: 'center' }}>

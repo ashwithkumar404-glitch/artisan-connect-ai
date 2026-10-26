@@ -5,6 +5,7 @@ import ChatBubble from "../components/ChatBubble.jsx";
 import SideMenu from "../components/SideMenu.jsx";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../lib/AuthContext";
+import ThemeToggle from "../components/ThemeToggle.jsx";
 import {
   isLatinTransliteration,
   extractProductFacts,
@@ -28,6 +29,8 @@ function HomePage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [partialUploadFailure, setPartialUploadFailure] = useState(null); // { productId, file, storagePath }
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Workflow state
@@ -54,6 +57,7 @@ function HomePage() {
 
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const textInputRef = useRef(null);
   const [showPhotoPickerSheet, setShowPhotoPickerSheet] = useState(false);
   const chatBottomRef = useRef(null);
 
@@ -172,6 +176,15 @@ function HomePage() {
       case 'open_gallery':
         triggerGallery();
         break;
+      case 'speak_description':
+        startVoiceRecording();
+        break;
+      case 'type_description':
+        textInputRef.current?.focus();
+        break;
+      case 'retry_photo_upload':
+        handleRetryPhotoUpload();
+        break;
       case 'view_products':
         navigate('/my-products');
         break;
@@ -195,6 +208,56 @@ function HomePage() {
         break;
       default:
         console.log('Action:', action);
+    }
+  };
+
+  const handleRetryPhotoUpload = async () => {
+    if (!partialUploadFailure?.productId || !partialUploadFailure?.file) {
+      addAssistantMessage(isKn ? "⚠️ ಮರುಪ್ರಯತ್ನಿಸಲು ಫೋಟೋ ಲಭ್ಯವಿಲ್ಲ." : "⚠️ No pending photo to retry.");
+      return;
+    }
+    setProcessing(true);
+    try {
+      const file = partialUploadFailure.file;
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}_retry.${fileExt}`;
+      const storagePath = `${artisan.id}/${partialUploadFailure.productId}/${fileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('product-images')
+        .upload(storagePath, file);
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(storagePath);
+
+      await supabase.from('product_images').insert({
+        product_id: partialUploadFailure.productId,
+        image_url: urlData.publicUrl,
+        display_order: 0
+      });
+
+      setPartialUploadFailure(null);
+      setPendingImageFile(null);
+      if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview);
+      setPendingImagePreview('');
+      setProcessing(false);
+      addAssistantMessage(
+        isKn
+          ? "✅ ಫೋಟೋ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಮತ್ತು ಉತ್ಪನ್ನಕ್ಕೆ ಲಿಂಕ್ ಮಾಡಲಾಗಿದೆ!"
+          : "✅ Photo successfully uploaded and linked to your product!",
+        [{ label: isKn ? '📦 ನನ್ನ ಉತ್ಪನ್ನಗಳನ್ನು ನೋಡಿ' : '📦 View My Products', action: 'view_products' }]
+      );
+    } catch (err) {
+      setProcessing(false);
+      addAssistantMessage(
+        isKn
+          ? `❌ ಮರುಪ್ರಯತ್ನ ವಿಫಲವಾಗಿದೆ: ${err.message}`
+          : `❌ Photo retry failed: ${err.message}`,
+        [{ label: isKn ? '🔄 ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ' : '🔄 Try Again', action: 'retry_photo_upload' }]
+      );
     }
   };
 
@@ -368,6 +431,9 @@ function HomePage() {
           addAssistantMessage(msg);
         }
       },
+      onTimerTick: (sec) => {
+        setRecordingSeconds(sec);
+      },
       onInterimResult: (_interim, fullDisplay) => {
         setLiveTranscript(fullDisplay);
       },
@@ -378,19 +444,14 @@ function HomePage() {
       },
       onError: (errType, details) => {
         console.warn('Voice session error:', errType, details);
-        if (errType === 'no_speech') {
-          if (details?.audioUrl) {
-            addUserMessage(
-              isKn ? "🎙️ ಧ್ವನಿ ವಿವರಣೆ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗಿದೆ" : "🎙️ Voice description recorded",
-              { type: 'audio', url: details.audioUrl }
-            );
-          }
-          addAssistantMessage(
-            isKn
-              ? "⚠️ ಯಾವುದೇ ಧ್ವನಿ ಕೇಳಿಸಲಿಲ್ಲ ಅಥವಾ ಗುರುತಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೈಕ್ರೊಫೋನ್ ಬಟನ್ ಒತ್ತಿ ಮತ್ತೊಮ್ಮೆ ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ, ಅಥವಾ ಕೆಳಗಿನ ಸಂದೇಶ ಪೆಟ್ಟಿಗೆಯಲ್ಲಿ ವಿವರಣೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ."
-              : "⚠️ No speech was detected or voice could not be recognized. Please tap the mic to speak clearly, or type your description in the message box below."
+        if (details?.audioUrl) {
+          addUserMessage(
+            isKn ? "🎙️ ಧ್ವನಿ ವಿವರಣೆ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗಿದೆ" : "🎙️ Voice description recorded",
+            { type: 'audio', url: details.audioUrl }
           );
         }
+        const msg = getVoiceStatusMessage(errType, selectedLanguage, details);
+        addAssistantMessage(msg);
       },
       backendTranscribe: async (audioBlob, lang) => {
         try {
@@ -497,19 +558,10 @@ function HomePage() {
         || categories.find((c) => c.name.toLowerCase() === 'other handicrafts')
         || categories[0];
 
-      let base64Image = null;
-      let mimeType = 'image/jpeg';
-      if (pendingImageFile) {
-        base64Image = await fileToBase64(pendingImageFile);
-        mimeType = pendingImageFile.type;
-      }
-
-      // Try edge function if available, fallback smoothly to local deterministic engine
+      // Try edge function if available (using fast text-only payload without heavy base64 overhead)
       try {
         const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('generate-product', {
           body: {
-            image: base64Image,
-            mimeType,
             voiceTranscript: voiceText,
             language: selectedLanguage
           }
@@ -601,6 +653,8 @@ function HomePage() {
 
   // 7. Save or Publish Product (Task 4)
   const handleSaveProduct = async (draft, targetStatus = 'draft') => {
+    if (isSavingProduct || processing) return;
+
     if (!artisan) {
       addAssistantMessage(
         isKn
@@ -619,32 +673,68 @@ function HomePage() {
       return;
     }
 
+    setIsSavingProduct(true);
     setProcessing(true);
 
     try {
-      // Backward-compatible representation: Preserve verified Kannada version inside description
-      const combinedDescription = draft.local_description
-        ? `${draft.description}\n\n---\nಕನ್ನಡ ವಿವರಣೆ (Kannada Listing):\nಶೀರ್ಷಿಕೆ: ${draft.local_title || draft.name}\nವಿವರಣೆ: ${draft.local_description}`
-        : draft.description;
+      // 1. Insert product row with local language separation
+      const cleanEnglishDescription = (draft.description || '').trim();
 
-      // 1. Insert product row
-      const { data: newProd, error: prodErr } = await supabase
+      let newProd = null;
+      let prodErr = null;
+
+      // Primary insert attempting local_title and local_description
+      const primaryPayload = {
+        artisan_id: artisan.id,
+        category_id: draft.category_id || categories[0]?.id,
+        name: draft.name.trim(), // English marketplace name
+        description: cleanEnglishDescription,
+        local_title: draft.local_title ? draft.local_title.trim() : null,
+        local_description: draft.local_description ? draft.local_description.trim() : null,
+        price: Number(draft.price),
+        stock_quantity: Number(draft.stock_quantity),
+        status: targetStatus
+      };
+
+      const primaryRes = await supabase
         .from('products')
-        .insert({
-          artisan_id: artisan.id,
-          category_id: draft.category_id || categories[0]?.id,
-          name: draft.name.trim(), // English marketplace name
-          description: combinedDescription.trim(),
-          price: Number(draft.price),
-          stock_quantity: Number(draft.stock_quantity),
-          status: targetStatus
-        })
+        .insert(primaryPayload)
         .select()
         .single();
 
+      newProd = primaryRes.data;
+      prodErr = primaryRes.error;
+
+      // Fallback if local_title or local_description column does not yet exist in remote database
+      if (prodErr && (prodErr.message?.includes('local_title') || prodErr.message?.includes('local_description'))) {
+        const fallbackCombinedDescription = draft.local_description
+          ? `${cleanEnglishDescription}\n\n---\nಕನ್ನಡ ವಿವರಣೆ (Kannada Listing):\nಶೀರ್ಷಿಕೆ: ${draft.local_title || draft.name}\nವಿವರಣೆ: ${draft.local_description}`
+          : cleanEnglishDescription;
+
+        const fallbackRes = await supabase
+          .from('products')
+          .insert({
+            artisan_id: artisan.id,
+            category_id: draft.category_id || categories[0]?.id,
+            name: draft.name.trim(),
+            description: fallbackCombinedDescription.trim(),
+            price: Number(draft.price),
+            stock_quantity: Number(draft.stock_quantity),
+            status: targetStatus
+          })
+          .select()
+          .single();
+
+        newProd = fallbackRes.data;
+        prodErr = fallbackRes.error;
+      }
+
       if (prodErr) throw prodErr;
 
-      // 2. Upload photo if present
+      // 2. Upload photo if present (with honest error reporting, never silent failure)
+      let photoUploadFailed = false;
+      let uploadErrorMessage = '';
+
       if (pendingImageFile) {
         const fileExt = pendingImageFile.name.split('.').pop() || 'jpg';
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
@@ -654,20 +744,48 @@ function HomePage() {
           .from('product-images')
           .upload(storagePath, pendingImageFile);
 
-        if (!uploadErr) {
+        if (uploadErr) {
+          console.error("Storage upload error:", uploadErr);
+          photoUploadFailed = true;
+          uploadErrorMessage = uploadErr.message;
+          setPartialUploadFailure({
+            productId: newProd.id,
+            file: pendingImageFile,
+            productName: draft.name
+          });
+        } else {
           const { data: urlData } = supabase.storage
             .from('product-images')
             .getPublicUrl(storagePath);
 
-          await supabase.from('product_images').insert({
+          const { error: imgLinkErr } = await supabase.from('product_images').insert({
             product_id: newProd.id,
             image_url: urlData.publicUrl,
             display_order: 0
           });
+
+          if (imgLinkErr) {
+            console.error("Image linking error:", imgLinkErr);
+          }
         }
       }
 
       setProcessing(false);
+      setIsSavingProduct(false);
+
+      if (photoUploadFailed) {
+        addAssistantMessage(
+          isKn
+            ? `⚠️ **ಉತ್ಪನ್ನ ವಿವರಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ, ಆದರೆ ಫೋಟೋ ಅಪ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ:** ${uploadErrorMessage || 'ಶೇಖರಣಾ ದೋಷ'}.\n\nಮತ್ತೊಂದು ಉತ್ಪನ್ನವನ್ನು ರಚಿಸದೆ ಫೋಟೋವನ್ನು ಮತ್ತೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಕೆಳಗಿನ ಬಟನ್ ಒತ್ತಿ.`
+            : `⚠️ **Product details saved, but photo upload failed:** ${uploadErrorMessage || 'Storage error'}.\n\nYou can retry uploading the photo below without creating duplicate products.`,
+          [
+            { label: isKn ? '🔄 ಫೋಟೋ ಮರುಪ್ರಯತ್ನಿಸಿ' : '🔄 Retry Photo Upload', action: 'retry_photo_upload' },
+            { label: isKn ? '📦 ನನ್ನ ಉತ್ಪನ್ನಗಳನ್ನು ನೋಡಿ' : '📦 View in My Products', action: 'view_products' }
+          ]
+        );
+        return;
+      }
+
       setWorkflowState('idle');
 
       const statusKn = targetStatus === 'published' ? 'ಮಾರ್ಕೆಟ್‌ಪ್ಲೇಸ್‌ನಲ್ಲಿ ಪ್ರಕಟಿಸಲಾಗಿದೆ (PUBLISHED)' : 'ಕರಡಾಗಿ (DRAFT) ಉಳಿಸಲಾಗಿದೆ';
@@ -689,15 +807,18 @@ function HomePage() {
 
       // Clean up workflow
       setPendingImageFile(null);
+      if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview);
       setPendingImagePreview('');
       setCurrentDraft(null);
       setOriginalAudioBlob(null);
       setOriginalAudioUrl('');
       setRawTranscript('');
       setExtractedFacts(null);
+      setPartialUploadFailure(null);
     } catch (err) {
       console.error('Save error:', err);
       setProcessing(false);
+      setIsSavingProduct(false);
       addAssistantMessage(
         isKn
           ? `❌ ಉತ್ಪನ್ನ ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ: ${err.message || 'ಡೇಟಾಬೇಸ್ ದೋಷ'}`
@@ -796,17 +917,20 @@ function HomePage() {
           onClick={() => setMenuOpen(true)}
         >☰</button>
         <h1 className="app-title">Artisan Connect AI</h1>
-        <LanguageSelector
-          selectedLanguage={selectedLanguage}
-          onLanguageChange={(newLang) => {
-            setSelectedLanguage(newLang);
-            addAssistantMessage(
-              newLang === 'kn'
-                ? "🌐 ಭಾಷೆಯನ್ನು **ಕನ್ನಡಕ್ಕೆ (Kannada)** ಬದಲಾಯಿಸಲಾಗಿದೆ. ನೀವು ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಬಹುದು."
-                : "🌐 Language switched to **English**. You can speak or type in English."
-            );
-          }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+          <ThemeToggle />
+          <LanguageSelector
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={(newLang) => {
+              setSelectedLanguage(newLang);
+              addAssistantMessage(
+                newLang === 'kn'
+                  ? "🌐 ಭಾಷೆಯನ್ನು **ಕನ್ನಡಕ್ಕೆ (Kannada)** ಬದಲಾಯಿಸಲಾಗಿದೆ. ನೀವು ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಬಹುದು."
+                  : "🌐 Language switched to **English**. You can speak or type in English."
+              );
+            }}
+          />
+        </div>
       </header>
 
       {/* Side drawer */}
@@ -896,6 +1020,28 @@ function HomePage() {
             </div>
           </div>
           <div className="pending-photo-actions">
+            {workflowState === 'awaiting_voice' && (
+              <>
+                <button
+                  type="button"
+                  className="btn-photo-action primary"
+                  onClick={startVoiceRecording}
+                  disabled={processing || isRecording}
+                  title={isKn ? "ಧ್ವನಿಯಲ್ಲಿ ವಿವರಣೆ ನೀಡಿ" : "Speak description"}
+                >
+                  🎙️ {isKn ? 'ಮಾತನಾಡಿ' : 'Speak'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-photo-action"
+                  onClick={() => textInputRef.current?.focus()}
+                  disabled={processing || isRecording}
+                  title={isKn ? "ವಿವರಣೆ ಟೈಪ್ ಮಾಡಿ" : "Type description"}
+                >
+                  ✏️ {isKn ? 'ಟೈಪ್ ಮಾಡಿ' : 'Type'}
+                </button>
+              </>
+            )}
             <button
               type="button"
               className="btn-photo-action"
@@ -931,6 +1077,7 @@ function HomePage() {
         </button>
 
         <input
+          ref={textInputRef}
           type="text"
           placeholder={
             isRecording

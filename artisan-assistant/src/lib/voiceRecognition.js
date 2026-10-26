@@ -149,6 +149,21 @@ export function getVoiceStatusMessage(state, language = 'kn', details = {}) {
           ? '⚠️ ಯಾವುದೇ ಧ್ವನಿ ಕೇಳಿಸಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೈಕ್ರೊಫೋನ್ ಬಟನ್ ಒತ್ತಿ ಮತ್ತೊಮ್ಮೆ ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ.'
           : '⚠️ No speech was detected. Please tap the microphone and speak clearly.';
       }
+      if (details.reason === 'backend_unconfigured') {
+        return isKn
+          ? '⚠️ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ ಲಭ್ಯವಿಲ್ಲ ಮತ್ತು ಕ್ಲೌಡ್ ಧ್ವನಿ ಸೇವೆ ಇನ್ನೂ ಕಾನ್ಫಿಗರ್ ಆಗಿಲ್ಲ. ದಯವಿಟ್ಟು ವಿವರಣೆಯನ್ನು ಕೆಳಗಿನ ಸಂದೇಶ ಪೆಟ್ಟಿಗೆಯಲ್ಲಿ ಟೈಪ್ ಮಾಡಿ ಅಥವಾ Chrome ಬ್ರೌಸರ್ ಬಳಸಿ.'
+          : '⚠️ In-browser speech recognition is unavailable and cloud transcription is not configured. Please type your description below or use Google Chrome.';
+      }
+      if (details.reason === 'backend_failed') {
+        return isKn
+          ? '⚠️ ಧ್ವನಿ ಪರಿವರ್ತನೆ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿ ದೋಷ ಸಂಭವಿಸಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಮಾತನಾಡಿ ಅಥವಾ ಕೆಳಗೆ ವಿವರಣೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ.'
+          : '⚠️ Audio transcription service returned an error. Please try speaking again or type your description.';
+      }
+      if (details.reason === 'audio_recorded_no_transcription') {
+        return isKn
+          ? '🎙️ ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗಿದೆ, ಆದರೆ ಈ ಸಾಧನದಲ್ಲಿ ಪಠ್ಯಕ್ಕೆ ಪರಿವರ್ತಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಕೆಳಗಿನ ಸಂದೇಶ ಪೆಟ್ಟಿಗೆಯಲ್ಲಿ ವಿವರಣೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ.'
+          : '🎙️ Audio recorded, but automatic text transcription is unavailable on this device. Please type your product details below.';
+      }
       if (details.reason === 'network') {
         return isKn
           ? '⚠️ ನೆಟ್‌ವರ್ಕ್ ದೋಷದಿಂದ ಧ್ವನಿ ಗುರುತಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ.'
@@ -171,6 +186,7 @@ export function createVoiceSession({
   onStateChange = () => {},
   onInterimResult = () => {},
   onFinalTranscript = () => {},
+  onTimerTick = () => {},
   onError = () => {},
   backendTranscribe = null,
   customWindow = null,
@@ -319,6 +335,8 @@ export function createVoiceSession({
         // Start elapsed timer
         timerInterval = setInterval(() => {
           secondsElapsed += 1;
+          onTimerTick(secondsElapsed);
+          onStateChange(currentState, { language, secondsElapsed });
           if (secondsElapsed >= maxDurationSeconds) {
             stop();
           }
@@ -347,6 +365,8 @@ export function createVoiceSession({
 
         timerInterval = setInterval(() => {
           secondsElapsed += 1;
+          onTimerTick(secondsElapsed);
+          onStateChange(currentState, { language, secondsElapsed });
           if (secondsElapsed >= maxDurationSeconds) {
             stop();
           }
@@ -414,6 +434,8 @@ export function createVoiceSession({
       mediaRecorder = null;
     }
     cleanupTimersAndStreams();
+    secondsElapsed = 0;
+    onTimerTick(0);
     audioChunks = [];
     accumulatedFinalText = '';
     lastInterimText = '';
@@ -461,27 +483,48 @@ export function createVoiceSession({
     }
 
     // If SpeechRecognition produced no text, but we have an audio blob & backendTranscribe is provided
+    let backendReason = null;
     if (capturedAudioBlob && typeof backendTranscribe === 'function') {
       try {
         const backendResult = await backendTranscribe(capturedAudioBlob, language);
-        if (backendResult && backendResult.trim()) {
+        if (typeof backendResult === 'string' && backendResult.trim()) {
           const cleanBackendText = backendResult.trim();
           setState(VOICE_STATES.TRANSCRIPT_READY, { transcript: cleanBackendText, provider: 'backend' });
           onFinalTranscript(cleanBackendText, capturedAudioBlob, capturedAudioUrl);
           return;
+        } else if (backendResult && typeof backendResult === 'object') {
+          if (backendResult.transcript && typeof backendResult.transcript === 'string' && backendResult.transcript.trim()) {
+            const cleanBackendText = backendResult.transcript.trim();
+            setState(VOICE_STATES.TRANSCRIPT_READY, { transcript: cleanBackendText, provider: 'backend' });
+            onFinalTranscript(cleanBackendText, capturedAudioBlob, capturedAudioUrl);
+            return;
+          }
+          if (backendResult.error) {
+            backendReason = backendResult.error;
+          }
         }
       } catch (backendErr) {
         console.warn('Backend transcription fallback returned:', backendErr);
+        backendReason = 'backend_failed';
       }
     }
 
-    // If no valid text was produced by either engine
+    // Distinguish between actual silence, backend unconfigured, and recorded audio without text
+    let failureReason = 'no_speech';
+    if (backendReason === 'backend_unconfigured') {
+      failureReason = 'backend_unconfigured';
+    } else if (backendReason === 'backend_failed') {
+      failureReason = 'backend_failed';
+    } else if (capturedAudioBlob && (capturedAudioBlob.size > 200 || audioChunks.length > 0)) {
+      failureReason = 'audio_recorded_no_transcription';
+    }
+
     setState(VOICE_STATES.RECOGNITION_FAILED, {
-      reason: 'no_speech',
+      reason: failureReason,
       audioBlob: capturedAudioBlob,
       audioUrl: capturedAudioUrl,
     });
-    onError('no_speech', { audioBlob: capturedAudioBlob, audioUrl: capturedAudioUrl });
+    onError(failureReason, { audioBlob: capturedAudioBlob, audioUrl: capturedAudioUrl, reason: failureReason });
   }
 
   return {

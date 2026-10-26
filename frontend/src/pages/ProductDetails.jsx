@@ -5,6 +5,16 @@ import { useAuth } from '../lib/AuthContext';
 import { useCart } from '../lib/CartContext';
 import { createNotification } from '../lib/notifications';
 
+// Clean English description for marketplace, stripping legacy concatenated bilingual portions
+function getCleanEnglishDescription(desc) {
+  if (!desc) return '';
+  const sepIdx = desc.indexOf('\n\n---\n');
+  if (sepIdx !== -1) {
+    return desc.substring(0, sepIdx).trim();
+  }
+  return desc;
+}
+
 export default function ProductDetails() {
   const { id } = useParams();
   const location = useLocation();
@@ -389,7 +399,7 @@ export default function ProductDetails() {
             <div className="space-y-1.5">
               <h3 className="font-bold text-slate-800 text-sm">Product Description</h3>
               <p className="text-slate-655 text-sm leading-relaxed whitespace-pre-line">
-                {product.description || 'No description provided for this handicraft.'}
+                {getCleanEnglishDescription(product.description) || 'No description provided for this handicraft.'}
               </p>
             </div>
           </div>

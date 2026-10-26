@@ -5,9 +5,15 @@
   --light-green: #E7F5EC;
   --chat-bg: #F8F5EE;
   --bg: #FFFFFF;
+  --card-bg: #FFFFFF;
   --text: #1F2937;
   --secondary-text: #4B5563;
   --border: #E5E7EB;
+  --input-bg: #FFFFFF;
+  --bubble-assistant: #FFFFFF;
+  --bubble-assistant-border: #E5E7EB;
+  --bubble-user: #075E54;
+  --composer-bg: #FFFFFF;
   --danger: #DC2626;
   --danger-bg: #FEF2F2;
 
@@ -23,6 +29,27 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark Theme Tokens */
+[data-theme="dark"] {
+  --primary-green: #10B981;
+  --dark-green: #064E3B;
+  --light-green: #064E3B;
+  --chat-bg: #0F172A;
+  --bg: #1E293B;
+  --card-bg: #1E293B;
+  --text: #F1F5F9;
+  --secondary-text: #94A3B8;
+  --border: #334155;
+  --input-bg: #0F172A;
+  --bubble-assistant: #1E293B;
+  --bubble-assistant-border: #334155;
+  --bubble-user: #047857;
+  --composer-bg: #1E293B;
+  --danger: #EF4444;
+  --danger-bg: #450A0A;
+  color-scheme: dark;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -34,8 +61,10 @@ html, body {
   height: 100%;
   overflow-x: hidden;
   background-color: var(--chat-bg);
+  color: var(--text);
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root {
@@ -64,4 +93,20 @@ button {
 input, textarea, select {
   font-family: inherit;
   font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+}
+
+/* Accessible focus outline */
+:focus-visible {
+  outline: 2px solid var(--primary-green);
+  outline-offset: 2px;
+}
+
+/* Restrained motion support */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
