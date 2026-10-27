@@ -3,6 +3,9 @@
   --primary-green: #075E54;
   --dark-green: #064E3B;
   --light-green: #E7F5EC;
+  --accent: #075E54;
+  --accent-bg: #E7F5EC;
+  --accent-border: #128C7E;
   --chat-bg: #F8F5EE;
   --bg: #FFFFFF;
   --card-bg: #FFFFFF;
@@ -16,6 +19,10 @@
   --composer-bg: #FFFFFF;
   --danger: #DC2626;
   --danger-bg: #FEF2F2;
+  --header-bg: #064E3B;
+  --header-text: #FFFFFF;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --modal-overlay: rgba(0, 0, 0, 0.45);
 
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Kannada', 'Kannada Sangam MN', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -32,8 +39,11 @@
 /* Dark Theme Tokens */
 [data-theme="dark"] {
   --primary-green: #10B981;
-  --dark-green: #064E3B;
+  --dark-green: #047857;
   --light-green: #064E3B;
+  --accent: #10B981;
+  --accent-bg: #064E3B;
+  --accent-border: #047857;
   --chat-bg: #0F172A;
   --bg: #1E293B;
   --card-bg: #1E293B;
@@ -47,6 +57,10 @@
   --composer-bg: #1E293B;
   --danger: #EF4444;
   --danger-bg: #450A0A;
+  --header-bg: #0F172A;
+  --header-text: #F1F5F9;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --modal-overlay: rgba(0, 0, 0, 0.7);
   color-scheme: dark;
 }
 
@@ -76,10 +90,18 @@ html, body {
   flex-direction: column;
   box-sizing: border-box;
   text-align: left;
+  background-color: var(--chat-bg);
+  color: var(--text);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Smooth color transitions for interactive elements */
+body, #root, .chat-app, .login-card, .side-drawer, .message-bubble, .chat-composer, input, textarea, select, .action-pill-btn, .photo-sheet-content {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 /* Ensure Kannada Unicode script renders naturally without character breakages */
-p, span, div, h1, h2, h3, h4, h5, h6, label, button, input, textarea {
+p, span, div, h1, h2, h3, h4, h5, h6, label, button, input, textarea, select {
   overflow-wrap: break-word;
   word-break: normal;
   line-height: 1.5;
@@ -93,6 +115,9 @@ button {
 input, textarea, select {
   font-family: inherit;
   font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+  background-color: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 /* Accessible focus outline */

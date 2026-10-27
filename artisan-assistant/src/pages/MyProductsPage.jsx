@@ -171,13 +171,13 @@ function MyProductsPage() {
       </div>
 
       {statusMsg && (
-        <div style={{ padding: '0.6rem', background: '#e8f5e9', color: '#2e7d32', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+        <div style={{ padding: '0.6rem', background: 'var(--light-green)', color: 'var(--primary-green)', border: '1px solid var(--primary-green)', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
           {statusMsg}
         </div>
       )}
 
       {errorMsg && (
-        <div style={{ padding: '0.6rem', background: '#ffebee', color: '#c62828', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+        <div style={{ padding: '0.6rem', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
           {errorMsg}
         </div>
       )}
@@ -212,7 +212,7 @@ function MyProductsPage() {
                   padding: '0.75rem',
                   background: 'var(--bg)',
                   borderRadius: '8px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  boxShadow: 'var(--card-shadow)',
                   border: '1px solid var(--border)',
                   color: 'var(--text)'
                 }}
@@ -256,8 +256,8 @@ function MyProductsPage() {
                         borderRadius: '4px',
                         fontSize: '0.7rem',
                         fontWeight: 600,
-                        background: isPub ? '#e8f5e9' : '#fff3e0',
-                        color: isPub ? '#2e7d32' : '#e65100'
+                        background: isPub ? 'var(--light-green)' : 'rgba(230, 81, 0, 0.15)',
+                        color: isPub ? 'var(--primary-green)' : '#e65100'
                       }}
                     >
                       {isPub ? 'PUBLISHED' : 'DRAFT'}
@@ -269,9 +269,9 @@ function MyProductsPage() {
                       style={{
                         padding: '0.25rem 0.5rem',
                         fontSize: '0.75rem',
-                        background: isPub ? '#f5f5f5' : '#075E54',
-                        color: isPub ? '#333' : 'white',
-                        border: '1px solid #ccc',
+                        background: isPub ? 'var(--border)' : 'var(--primary-green)',
+                        color: isPub ? 'var(--text)' : 'white',
+                        border: '1px solid var(--border)',
                         borderRadius: '4px',
                         cursor: isBusy ? 'not-allowed' : 'pointer'
                       }}
@@ -285,9 +285,9 @@ function MyProductsPage() {
                       style={{
                         padding: '0.25rem 0.5rem',
                         fontSize: '0.75rem',
-                        background: '#ffebee',
-                        color: '#c62828',
-                        border: '1px solid #ffcdd2',
+                        background: 'var(--danger-bg)',
+                        color: 'var(--danger)',
+                        border: '1px solid var(--danger)',
                         borderRadius: '4px',
                         cursor: isBusy ? 'not-allowed' : 'pointer',
                         marginLeft: 'auto'

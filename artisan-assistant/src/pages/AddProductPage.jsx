@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 function AddProductPage() {
   const { user, artisan, loading: authLoading } = useAuth();
@@ -164,14 +165,20 @@ function AddProductPage() {
   const selectedCatObj = categories.find((c) => c.id === selectedCategory);
 
   return (
-    <div style={{ maxWidth: '480px', margin: '0 auto', padding: '1.5rem', fontFamily: 'inherit' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-        <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Add a Product</h1>
-        <Link to="/" style={{ color: 'var(--accent)', textDecoration: 'none' }}>← Home</Link>
+    <div style={{ maxWidth: '480px', margin: '0 auto', padding: '1.5rem', fontFamily: 'inherit', color: 'var(--text)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Link to="/" style={{ color: 'var(--primary-green)', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
+          <h1 style={{ fontSize: '1.4rem', margin: 0, color: 'var(--primary-green)' }}>Add a Product</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ThemeToggle />
+          <Link to="/" style={{ color: 'var(--secondary-text)', textDecoration: 'none', fontSize: '0.9rem' }}>Home</Link>
+        </div>
       </div>
 
       {errorMsg && (
-        <div style={{ padding: '0.75rem', background: '#ffebee', color: '#c62828', borderRadius: '6px', marginBottom: '1rem' }}>
+        <div style={{ padding: '0.75rem', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '6px', marginBottom: '1rem' }}>
           {errorMsg}
         </div>
       )}
@@ -185,7 +192,7 @@ function AddProductPage() {
               accept="image/*"
               capture="environment"
               onChange={handleImageChange}
-              style={{ padding: '0.5rem', border: '1px solid #ccc', borderRadius: '6px' }}
+              style={{ padding: '0.5rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' }}
             />
           </label>
           {imagePreview && (
@@ -204,7 +211,7 @@ function AddProductPage() {
               placeholder="e.g. Handwoven Bamboo Storage Basket"
               onChange={(e) => setProductName(e.target.value)}
               required
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '6px' }}
+              style={{ padding: '0.6rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' }}
             />
           </label>
 
@@ -213,7 +220,7 @@ function AddProductPage() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '6px' }}
+              style={{ padding: '0.6rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' }}
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -229,7 +236,7 @@ function AddProductPage() {
               onChange={(e) => setDescription(e.target.value)}
               required
               rows={4}
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '6px' }}
+              style={{ padding: '0.6rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' }}
             />
           </label>
 
@@ -243,7 +250,7 @@ function AddProductPage() {
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 required
-                style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '6px' }}
+                style={{ padding: '0.6rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' }}
               />
             </label>
 
@@ -255,7 +262,7 @@ function AddProductPage() {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 required
-                style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '6px' }}
+                style={{ padding: '0.6rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' }}
               />
             </label>
           </div>
@@ -280,8 +287,8 @@ function AddProductPage() {
       )}
 
       {step === 'review' && (
-        <div style={{ background: '#f9f9f9', padding: '1rem', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.25rem', marginTop: 0 }}>Review Product Details</h2>
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', padding: '1rem', borderRadius: '8px' }}>
+          <h2 style={{ fontSize: '1.25rem', marginTop: 0, color: 'var(--primary-green)' }}>Review Product Details</h2>
           {imagePreview && (
             <img
               src={imagePreview}
@@ -332,8 +339,8 @@ function AddProductPage() {
               onClick={() => setStep('form')}
               style={{
                 padding: '0.65rem',
-                background: '#e0e0e0',
-                color: '#333',
+                background: 'var(--border)',
+                color: 'var(--text)',
                 border: 'none',
                 borderRadius: '6px',
                 cursor: 'pointer'
@@ -352,14 +359,14 @@ function AddProductPage() {
       )}
 
       {step === 'done' && (
-        <div style={{ textAlign: 'center', padding: '2rem', background: '#e8f5e9', borderRadius: '8px' }}>
-          <h2 style={{ color: '#2e7d32' }}>✅ Product Saved Successfully!</h2>
+        <div style={{ textAlign: 'center', padding: '2rem', background: 'var(--light-green)', border: '1px solid var(--primary-green)', borderRadius: '8px' }}>
+          <h2 style={{ color: 'var(--primary-green)' }}>✅ Product Saved Successfully!</h2>
           <p>
             Your product has been saved as <strong>{status.toUpperCase()}</strong>.
             It is synchronized with your Artisan Dashboard.
           </p>
           {createdProductId && (
-            <p style={{ fontSize: '0.85rem', color: '#666' }}>ID: {createdProductId}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--secondary-text)' }}>ID: {createdProductId}</p>
           )}
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem' }}>
             <button

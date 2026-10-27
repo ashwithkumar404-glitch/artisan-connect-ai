@@ -17,8 +17,32 @@ function ThemeToggle() {
     localStorage.setItem('artisan_theme', theme);
   }, [theme]);
 
+  // Synchronize theme across multiple instances or tabs
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'artisan_theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+        setTheme(e.newValue);
+      }
+    };
+    const handleCustomChange = (e) => {
+      if (e.detail && (e.detail === 'light' || e.detail === 'dark')) {
+        setTheme(e.detail);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('artisan-theme-change', handleCustomChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('artisan-theme-change', handleCustomChange);
+    };
+  }, []);
+
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setTheme((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      window.dispatchEvent(new CustomEvent('artisan-theme-change', { detail: next }));
+      return next;
+    });
   };
 
   return (
@@ -30,7 +54,7 @@ function ThemeToggle() {
       title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
       style={{
         background: 'transparent',
-        border: '1px solid rgba(255, 255, 255, 0.4)',
+        border: '1px solid var(--border, rgba(255, 255, 255, 0.4))',
         borderRadius: '50%',
         width: '36px',
         height: '36px',
@@ -39,10 +63,10 @@ function ThemeToggle() {
         justifyContent: 'center',
         cursor: 'pointer',
         fontSize: '1.1rem',
-        color: 'var(--header-text, #ffffff)',
+        color: 'var(--header-text, var(--text, #ffffff))',
         padding: 0,
         touchAction: 'manipulation',
-        transition: 'transform 0.15s ease',
+        transition: 'transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease',
       }}
     >
       {theme === 'light' ? '🌙' : '☀️'}

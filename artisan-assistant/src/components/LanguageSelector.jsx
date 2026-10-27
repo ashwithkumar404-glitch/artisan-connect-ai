@@ -4,7 +4,11 @@ function LanguageSelector({ selectedLanguage = 'kn', onLanguageChange }) {
   const handleOpenMarketplace = () => {
     const marketplaceUrl = import.meta.env.VITE_MARKETPLACE_URL;
     if (marketplaceUrl && marketplaceUrl.trim()) {
-      window.open(marketplaceUrl.trim(), '_blank', 'noopener,noreferrer');
+      let targetUrl = marketplaceUrl.trim();
+      if (!/^https?:\/\//i.test(targetUrl)) {
+        targetUrl = 'https://' + targetUrl;
+      }
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
     } else {
       alert(
         isKn

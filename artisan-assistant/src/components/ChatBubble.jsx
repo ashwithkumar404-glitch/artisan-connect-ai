@@ -90,57 +90,57 @@ function ChatBubble({
 
           {isEditing ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                 {isKn ? 'ಕನ್ನಡ ಶೀರ್ಷಿಕೆ (Kannada Title):' : 'Title:'}
                 <input
                   type="text"
                   value={editLocalTitle}
                   onChange={(e) => setEditLocalTitle(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                  style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                 />
               </label>
 
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                 {isKn ? 'ಮಾರ್ಕೆಟ್‌ಪ್ಲೇಸ್ ಇಂಗ್ಲಿಷ್ ಶೀರ್ಷಿಕೆ (English Marketplace Title):' : 'English Title:'}
                 <input
                   type="text"
                   value={editEnglishTitle}
                   onChange={(e) => setEditEnglishTitle(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                  style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                 />
               </label>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600 }}>
+                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                   {isKn ? 'ಮಾರಾಟ ಬೆಲೆ (₹):' : 'Price (₹):'}
                   <input
                     type="number"
                     min="1"
                     value={editPrice}
                     onChange={(e) => setEditPrice(e.target.value)}
-                    style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                   />
                 </label>
 
-                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600 }}>
+                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                   {isKn ? 'ದಾಸ್ತಾನು ಪ್ರಮಾಣ:' : 'Stock Qty:'}
                   <input
                     type="number"
                     min="1"
                     value={editStock}
                     onChange={(e) => setEditStock(e.target.value)}
-                    style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                   />
                 </label>
               </div>
 
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                 {isKn ? 'ವಿವರಣೆ (Description):' : 'Description:'}
                 <textarea
                   value={editDesc}
                   rows={3}
                   onChange={(e) => setEditDesc(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                  style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                 />
               </label>
 
@@ -157,11 +157,11 @@ function ChatBubble({
             <div>
               {/* Voice correction helper hint */}
               <div style={{
-                background: '#e8f5e9',
-                borderLeft: '4px solid #2e7d32',
+                background: 'var(--light-green)',
+                borderLeft: '4px solid var(--primary-green)',
                 padding: '0.4rem 0.6rem',
                 fontSize: '0.78rem',
-                color: '#1b5e20',
+                color: 'var(--primary-green)',
                 borderRadius: '4px',
                 marginBottom: '0.5rem'
               }}>
@@ -172,7 +172,7 @@ function ChatBubble({
               </div>
 
               {/* Title in reviewed language */}
-              <h3 className="draft-title" style={{ fontSize: '1.1rem', color: '#075E54' }}>
+              <h3 className="draft-title" style={{ fontSize: '1.1rem', color: 'var(--primary-green)' }}>
                 {isKn ? (draft.local_title || draft.name) : draft.name}
               </h3>
 
@@ -192,14 +192,14 @@ function ChatBubble({
 
               {/* English marketplace preview toggle */}
               {isKn && (
-                <div style={{ marginTop: '0.6rem', borderTop: '1px dashed #ccc', paddingTop: '0.4rem' }}>
+                <div style={{ marginTop: '0.6rem', borderTop: '1px dashed var(--border)', paddingTop: '0.4rem' }}>
                   <button
                     type="button"
                     onClick={() => setShowEnglishPreview(!showEnglishPreview)}
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#0284c7',
+                      color: 'var(--primary-green)',
                       fontSize: '0.8rem',
                       cursor: 'pointer',
                       padding: 0,
@@ -214,16 +214,16 @@ function ChatBubble({
                   {showEnglishPreview && (
                     <div style={{
                       marginTop: '0.4rem',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--chat-bg)',
+                      border: '1px solid var(--border)',
                       borderRadius: '6px',
                       padding: '0.5rem',
                       fontSize: '0.8rem'
                     }}>
-                      <div style={{ fontWeight: 600, color: '#334155' }}>Marketplace Title:</div>
-                      <div style={{ marginBottom: '0.3rem' }}>{draft.name}</div>
-                      <div style={{ fontWeight: 600, color: '#334155' }}>Marketplace Description:</div>
-                      <div style={{ color: '#475569' }}>{draft.description}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--primary-green)' }}>Marketplace Title:</div>
+                      <div style={{ marginBottom: '0.3rem', color: 'var(--text)' }}>{draft.name}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--primary-green)' }}>Marketplace Description:</div>
+                      <div style={{ color: 'var(--secondary-text)' }}>{draft.description}</div>
                     </div>
                   )}
                 </div>

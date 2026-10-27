@@ -125,3 +125,32 @@ test('9. Government ID & OTP login landing page structure', () => {
   assert.ok(content.includes('authMethod'), 'Must support fallback toggle for staff / email & password');
   assert.ok(!content.includes('123456'), 'Must NOT hardcode fake OTP in production client code');
 });
+
+test('10. Complete application-wide light/dark theme system & reduced-motion support', () => {
+  const indexCssPath = path.resolve(__dirname, '../src/index.css');
+  const indexCss = fs.readFileSync(indexCssPath, 'utf-8');
+
+  // Verify core design tokens exist in light and dark modes
+  assert.ok(indexCss.includes('[data-theme="dark"]'), 'Must define dark theme selector [data-theme="dark"]');
+  assert.ok(indexCss.includes('--chat-bg'), 'Must specify --chat-bg token');
+  assert.ok(indexCss.includes('--card-bg'), 'Must specify --card-bg token');
+  assert.ok(indexCss.includes('--border'), 'Must specify --border token');
+  assert.ok(indexCss.includes('--primary-green'), 'Must specify --primary-green token');
+  assert.ok(indexCss.includes('--input-bg'), 'Must specify --input-bg token');
+  assert.ok(indexCss.includes('--danger'), 'Must specify --danger token');
+
+  // Verify reduced motion accessibility
+  assert.ok(indexCss.includes('prefers-reduced-motion'), 'Must support prefers-reduced-motion');
+  assert.ok(indexCss.includes('animation-duration: 0.01ms'), 'Must curtail animations when reduced motion is requested');
+
+  // Verify ThemeToggle presence across major pages & drawer
+  const addProdPath = path.resolve(__dirname, '../src/pages/AddProductPage.jsx');
+  const myProdPath = path.resolve(__dirname, '../src/pages/MyProductsPage.jsx');
+  const homePath = path.resolve(__dirname, '../src/pages/HomePage.jsx');
+  const sideMenuPath = path.resolve(__dirname, '../src/components/SideMenu.jsx');
+
+  assert.ok(fs.readFileSync(addProdPath, 'utf-8').includes('ThemeToggle'), 'AddProductPage must include ThemeToggle');
+  assert.ok(fs.readFileSync(myProdPath, 'utf-8').includes('ThemeToggle'), 'MyProductsPage must include ThemeToggle');
+  assert.ok(fs.readFileSync(homePath, 'utf-8').includes('ThemeToggle'), 'HomePage must include ThemeToggle');
+  assert.ok(fs.readFileSync(sideMenuPath, 'utf-8').includes('ThemeToggle'), 'SideMenu must include ThemeToggle');
+});

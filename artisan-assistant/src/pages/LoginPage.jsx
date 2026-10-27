@@ -104,6 +104,7 @@ function LoginPage() {
   }
 
   // Handle Stage 1: Request OTP with Government Artisan Registration ID
+  // Contract: 'artisanIdCode' is the unified property name throughout client and server.
   const handleRequestOtp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -121,7 +122,7 @@ function LoginPage() {
       const { data, error } = await supabase.functions.invoke('artisan-otp', {
         body: {
           action: 'request-otp',
-          governmentId: cleanId
+          artisanIdCode: cleanId
         }
       });
 
@@ -130,7 +131,7 @@ function LoginPage() {
         throw new Error(data?.error || 'OTP request failed. Please check the government ID.');
       }
 
-      setChallengeId(data.challengeId);
+      setChallengeId(data.challengeId || '');
       setMaskedPhone(data.maskedPhone || '••••••••••');
       setOtpStage('verify');
       setResendCountdown(60);
@@ -139,7 +140,7 @@ function LoginPage() {
       );
     } catch (err) {
       console.warn('OTP request notice:', err);
-      // Fallback explanation if Edge Function is not yet deployed or registry unpopulated
+      // Fallback explanation if ID not in registry
       if (err.message?.includes('not found') || err.message?.includes('registry')) {
         setErrorMsg(
           '⚠️ ಈ ನೋಂದಣಿ ಸಂಖ್ಯೆಯು ಕುಶಲಕರ್ಮಿಗಳ ಪಟ್ಟಿಯಲ್ಲಿ ಕಂಡುಬಂದಿಲ್ಲ. ದಯವಿಟ್ಟು ನೋಂದಣಿ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ ಅಥವಾ ಕೆಳಗೆ ಇಮೇಲ್ ಮೂಲಕ ಲಾಗಿನ್ ಮಾಡಿ (ID not in approved registry).'
@@ -152,24 +153,27 @@ function LoginPage() {
     }
   };
 
-  // Handle Stage 2: Verify OTP
+  // Handle Stage 2: Verify OTP & Establish Genuine Supabase Auth Session
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setInfoNotice('');
 
     const cleanOtp = otp.trim();
-    if (!cleanOtp || cleanOtp.length < 4) {
+    if (!cleanOtp || cleanOtp.length < 6) {
       setErrorMsg('ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ 6-ಅಂಕಿಯ OTP ನಮೂದಿಸಿ (Please enter 6-digit OTP).');
       return;
     }
 
+    const cleanId = governmentId.trim().toUpperCase();
     setLoading(true);
 
     try {
+      // 1. Verify OTP with Edge Function (tied to challengeId & artisanIdCode)
       const { data, error } = await supabase.functions.invoke('artisan-otp', {
         body: {
           action: 'verify-otp',
+          artisanIdCode: cleanId,
           challengeId,
           otp: cleanOtp
         }
@@ -180,8 +184,26 @@ function LoginPage() {
         throw new Error(data?.error || 'Invalid or expired OTP. Please try again.');
       }
 
-      setInfoNotice('✅ ಗುರುತಿಸುವಿಕೆ ಯಶಸ್ವಿಯಾಗಿದೆ! ಸೈನ್ ಇನ್ ಮಾಡಲಾಗುತ್ತಿದೆ (Verified! Signing in)...');
-      setTimeout(() => navigate('/'), 1000);
+      // 2. Establish genuine Supabase Auth session via token_hash
+      if (!data.token_hash) {
+        throw new Error('Authentication token missing from server response. Session could not be established.');
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.verifyOtp({
+        token_hash: data.token_hash,
+        type: 'magiclink'
+      });
+
+      if (authError) {
+        throw new Error(`Authentication failed: ${authError.message}`);
+      }
+
+      if (!authData?.session) {
+        throw new Error('Authenticated session could not be established. Please try logging in again.');
+      }
+
+      setInfoNotice('✅ ಗುರುತಿಸುವಿಕೆ ಯಶಸ್ವಿಯಾಗಿದೆ! ಸೈನ್ ಇನ್ ಮಾಡಲಾಗಿದೆ (Verified & Signed In!)...');
+      setTimeout(() => navigate('/'), 800);
     } catch (err) {
       console.warn('OTP verify error:', err);
       setErrorMsg(err.message || 'OTP ಪರಿಶೀಲನೆ ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ಸರಿಯಾದ OTP ನಮೂದಿಸಿ.');
@@ -266,20 +288,20 @@ function LoginPage() {
                 <div className="form-info-banner">
                   <span style={{ fontSize: '1.25rem' }}>🛡️</span>
                   <div>
-                    <strong>ಅಧಿಕೃತ ಕುಶಲಕರ್ಮಿ ನೋಂದಣಿ ID ಲಾಗಿನ್</strong>
+                    <strong>ಕುಶಲಕರ್ಮಿ ನೋಂದಣಿ ID ಲಾಗಿನ್ (Artisan Registry Login)</strong>
                     <div style={{ fontSize: '0.8rem', color: 'var(--secondary-text)', marginTop: '0.2rem' }}>
-                      Pehchan ID, MSME Udyam, ಅಥವಾ ರಾಜ್ಯ ಕುಶಲಕರ್ಮಿ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ OTP ಪಡೆಯಿರಿ.
+                      ಆಂತರಿಕ ಕುಶಲಕರ್ಮಿ ನೋಂದಣಿ ಸಂಖ್ಯೆಯನ್ನು (ಉದಾ: KA-ART-1001) ನಮೂದಿಸಿ OTP ಪಡೆಯಿರಿ.
                     </div>
                   </div>
                 </div>
 
                 <label className="form-field-label">
-                  ಕುಶಲಕರ್ಮಿ ನೋಂದಣಿ ಸಂಖ್ಯೆ (Government Artisan ID):
+                  ಕುಶಲಕರ್ಮಿ ನೋಂದಣಿ ಸಂಖ್ಯೆ (Artisan Registry ID):
                   <input
                     type="text"
                     value={governmentId}
                     onChange={(e) => setGovernmentId(e.target.value)}
-                    placeholder="ಉದಾ: IND-ART-1001 ಅಥವಾ UDYAM-..."
+                    placeholder="ಉದಾ: KA-ART-1001"
                     required
                     disabled={loading}
                     className="login-input"
@@ -327,7 +349,7 @@ function LoginPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || otp.length < 4}
+                  disabled={loading || otp.length < 6}
                   className="btn-primary-mobile login-submit-btn"
                 >
                   {loading ? 'ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...' : '✅ ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಸೈನ್ ಇನ್ ಮಾಡಿ (Verify & Sign In)'}
@@ -339,6 +361,7 @@ function LoginPage() {
                     onClick={() => {
                       setOtpStage('request');
                       setOtp('');
+                      setChallengeId('');
                       setErrorMsg('');
                     }}
                     className="link-btn"
