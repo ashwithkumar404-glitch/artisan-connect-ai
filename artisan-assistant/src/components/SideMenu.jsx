@@ -5,7 +5,7 @@ import ThemeToggle from './ThemeToggle.jsx';
 
 function SideMenu({ isOpen, onClose }) {
   const navigate = useNavigate();
-  const { user, artisan, signOut } = useAuth();
+  const { user, profile, artisan, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -25,23 +25,60 @@ function SideMenu({ isOpen, onClose }) {
         {/* User profile badge */}
         <div style={{ paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)', marginBottom: '0.5rem' }}>
           {user ? (
-            <div>
-              <p style={{ margin: 0, fontWeight: 700, color: 'var(--primary-green)', fontSize: '0.95rem' }}>
-                {artisan?.business_name || 'Artisan Account'}
-              </p>
-              <p style={{ margin: '0.2rem 0', color: 'var(--secondary-text)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.email}
-              </p>
-              <span style={{
-                fontSize: '0.7rem',
-                padding: '0.15rem 0.4rem',
-                borderRadius: '4px',
-                background: artisan?.verification_status === 'approved' ? 'var(--light-green)' : 'rgba(230, 81, 0, 0.15)',
-                color: artisan?.verification_status === 'approved' ? 'var(--primary-green)' : '#e65100',
-                fontWeight: 600
-              }}>
-                {artisan?.verification_status === 'approved' ? 'VERIFIED' : 'PENDING APPROVAL'}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt="Artisan Profile"
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '1.5px solid var(--primary-green)',
+                    flexShrink: 0
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'var(--light-green)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.2rem',
+                  flexShrink: 0
+                }}>
+                  🏺
+                </div>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ margin: 0, fontWeight: 700, color: 'var(--primary-green)', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {artisan?.business_name || profile?.full_name || 'Artisan Workshop'}
+                </p>
+                <p style={{ margin: '0.15rem 0', color: 'var(--secondary-text)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {user.email}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    padding: '0.12rem 0.35rem',
+                    borderRadius: '4px',
+                    background: artisan?.verification_status === 'approved' ? 'var(--light-green)' : 'rgba(230, 81, 0, 0.15)',
+                    color: artisan?.verification_status === 'approved' ? 'var(--primary-green)' : '#e65100',
+                    fontWeight: 600
+                  }}>
+                    {artisan?.verification_status === 'approved' ? '✓ VERIFIED' : 'PENDING'}
+                  </span>
+                  {artisan?.specialization && (
+                    <span style={{ fontSize: '0.7rem', color: 'var(--secondary-text)' }}>
+                      • {artisan.specialization}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div>
@@ -61,6 +98,11 @@ function SideMenu({ isOpen, onClose }) {
           <Link className="drawer-link" to="/" onClick={onClose}>💬 Assistant Chat</Link>
           <Link className="drawer-link" to="/my-products" onClick={onClose}>📦 My Products Catalog</Link>
           <Link className="drawer-link" to="/add-product" onClick={onClose}>➕ Add Product Form</Link>
+          <Link className="drawer-link" to="/my-orders" onClick={onClose}>📋 My Orders</Link>
+          <Link className="drawer-link" to="/my-earnings" onClick={onClose}>💰 My Earnings</Link>
+          <Link className="drawer-link" to="/product-performance" onClick={onClose}>📈 Product Performance</Link>
+          <Link className="drawer-link" to="/customer-feedback" onClick={onClose}>⭐ Customer Reviews</Link>
+          <Link className="drawer-link" to="/whatsapp" onClick={onClose}>📱 WhatsApp Channel</Link>
 
           {user ? (
             <button

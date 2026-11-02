@@ -22,9 +22,53 @@ import './Chat.css';
 
 function HomePage() {
   const navigate = useNavigate();
-  const { user, artisan, loading: authLoading } = useAuth();
+  const { user, profile, artisan, loading: authLoading, refreshProfile, signOut } = useAuth();
 
-  const [selectedLanguage, setSelectedLanguage] = useState('kn'); // Default to Kannada
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    try {
+      const saved = localStorage.getItem('artisan_language');
+      if (saved === 'kn' || saved === 'en') return saved;
+    } catch {
+      // ignore
+    }
+    return 'kn';
+  });
+
+  // Synchronize language across components & localStorage
+  useEffect(() => {
+    const handleLangChange = (e) => {
+      if (e.detail && (e.detail === 'kn' || e.detail === 'en') && e.detail !== selectedLanguage) {
+        setSelectedLanguage(e.detail);
+      }
+    };
+    const handleStorage = (e) => {
+      if (e.key === 'artisan_language' && (e.newValue === 'kn' || e.newValue === 'en') && e.newValue !== selectedLanguage) {
+        setSelectedLanguage(e.newValue);
+      }
+    };
+    window.addEventListener('artisan-language-change', handleLangChange);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('artisan-language-change', handleLangChange);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [selectedLanguage]);
+
+  // Synchronize language with authenticated artisan profile
+  useEffect(() => {
+    if (profile?.preferred_language && (profile.preferred_language === 'kn' || profile.preferred_language === 'en')) {
+      if (profile.preferred_language !== selectedLanguage) {
+        setSelectedLanguage(profile.preferred_language);
+        try {
+          localStorage.setItem('artisan_language', profile.preferred_language);
+          window.dispatchEvent(new CustomEvent('artisan-language-change', { detail: profile.preferred_language }));
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [profile?.preferred_language, selectedLanguage]);
+
   const [categories, setCategories] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -118,6 +162,30 @@ function HomePage() {
         {
           id: 'welcome_guest',
           sender: 'assistant',
+          welcomeCard: {
+            emblem: '🧵',
+            title: isKn ? 'ಆರ್ಟಿಸನ್ ಕನೆಕ್ಟ್ AI ಸಹಾಯಕ' : 'Artisan Connect AI Assistant',
+            subtitle: isKn
+              ? 'ಭಾರತೀಯ ಕರಕುಶಲಕರ್ಮಿಗಳಿಗೆ ಡಿಜಿಟಲ್ ಮಾರ್ಕೆಟ್‌ಪ್ಲೇಸ್ ಕ್ಯಾಟಲಾಗ್ ವೇದಿಕೆ'
+              : 'Voice & Camera Enabled Digital Catalog for Indian Artisans',
+            steps: [
+              {
+                icon: '📸',
+                title: isKn ? '೧. ಫೋಟೋ ತೆಗೆಯಿರಿ' : '1. Snap Photo',
+                desc: isKn ? 'ಮೊಬೈಲ್ ಕ್ಯಾಮೆರಾ ಬಳಸಿ ಕರಕುಶಲ ಉತ್ಪನ್ನದ ಫೋಟೋ ನೀಡಿ' : 'Capture craft item using camera or gallery'
+              },
+              {
+                icon: '🎙️',
+                title: isKn ? '೨. ಮಾತನಾಡಿ' : '2. Speak Details',
+                desc: isKn ? 'ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ (ಕನ್ನಡ/English) ಉತ್ಪನ್ನದ ಬಗ್ಗೆ ಮಾತನಾಡಿ' : 'Describe materials and craft in your native language'
+              },
+              {
+                icon: '🚀',
+                title: isKn ? '೩. ಪಟ್ಟಿ ಸಿದ್ಧ' : '3. Instant Listing',
+                desc: isKn ? 'ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿದ್ಧವಾದ ಪಟ್ಟಿಯನ್ನು ಮಾರುಕಟ್ಟೆಗೆ ಸೇರಿಸಿ' : 'Review AI-generated listing and publish directly'
+              }
+            ]
+          },
           text: isKn
             ? '🙏 **ಆರ್ಟಿಸನ್ ಕನೆಕ್ಟ್ AI ಸಹಾಯಕಕ್ಕೆ ಸ್ವಾಗತ!**\n\nನಿಮ್ಮ ಫೋನ್ ಕ್ಯಾಮೆರಾ ಮತ್ತು ಮಾತಿನ ಮೂಲಕ ವೃತ್ತಿಪರ ಮಾರುಕಟ್ಟೆ ಪಟ್ಟಿಗಳನ್ನು ರಚಿಸಲು ನಾನು ನಿಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತೇನೆ.\n\nಪ್ರಾರಂಭಿಸಲು ದಯವಿಟ್ಟು ನಿಮ್ಮ ಕುಶಲಕರ್ಮಿ ಖಾತೆಯೊಂದಿಗೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.'
             : '🙏 **Welcome to Artisan Connect AI Assistant!**\n\nI can help you create professional marketplace listings using your phone camera and voice.\n\nPlease sign in with your artisan account to get started.',
@@ -127,15 +195,90 @@ function HomePage() {
           ]
         }
       ]);
+    } else if (!profile && !artisan && !authLoading) {
+      // Authenticated but no profile or artisan record exists in database yet
+      setMessages([
+        {
+          id: 'missing_profile_notice',
+          sender: 'assistant',
+          welcomeCard: {
+            emblem: '⚠️',
+            title: isKn ? 'ಕುಶಲಕರ್ಮಿ ಪ್ರೊಫೈಲ್ ಅಪೂರ್ಣವಾಗಿದೆ' : 'Artisan Profile Incomplete',
+            subtitle: user.email || 'Artisan Account',
+            guidance: isKn
+              ? 'ನಿಮ್ಮ ಸೈನ್ ಇನ್ ಯಶಸ್ವಿಯಾಗಿದೆ, ಆದರೆ ಈ ಖಾತೆಗೆ ಸಂಬಂಧಿಸಿದ ಕುಶಲಕರ್ಮಿ ಪ್ರೊಫೈಲ್ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ. ಪ್ರೊಫೈಲ್ ಮರುಪಡೆಯಲು ರಿಫ್ರೆಶ್ ಮಾಡಿ ಅಥವಾ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.'
+              : 'Your authentication succeeded, but an artisan profile record has not yet been linked to this account in the database. Click Refresh Profile to reload, or contact your administrator.'
+          },
+          text: isKn
+            ? `⚠️ **ಪ್ರೊಫೈಲ್ ಮಾಹಿತಿ ಪತ್ತೆಯಾಗಿಲ್ಲ**\n\nಖಾತೆ: **${user.email || 'Artisan Account'}**\n\nಈ ಖಾತೆಗೆ ಕುಶಲಕರ್ಮಿ ಪ್ರೊಫೈಲ್ ಮತ್ತು ಅಂಗಡಿಯ ವಿವರಗಳು ಇನ್ನೂ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ದಾಖಲಾಗಿಲ್ಲ. ಪ್ರೊಫೈಲ್ ಲಿಂಕ್ ಆದ ನಂತರ ಮರುಪಡೆಯಲು ಕೆಳಗಿನ ಬಟನ್ ಒತ್ತಿ.`
+            : `⚠️ **Profile Record Missing**\n\nAccount: **${user.email || 'Artisan Account'}**\n\nAn artisan profile and workshop details have not yet been provisioned for this account in the database. Once created, click below to refresh.`,
+          actionButtons: [
+            { label: isKn ? '🔄 ಪ್ರೊಫೈಲ್ ರಿಫ್ರೆಶ್ ಮಾಡಿ (Refresh)' : '🔄 Refresh Profile', action: 'refresh_profile' },
+            { label: isKn ? '🚪 ಸೈನ್ ಔಟ್ (Sign Out)' : '🚪 Sign Out', action: 'logout' }
+          ]
+        }
+      ]);
     } else {
-      const shopName = artisan?.business_name || (isKn ? 'ಕುಶಲಕರ್ಮಿಗಳೇ' : 'Artisan');
+      const artisanLegalName = profile?.full_name || user?.user_metadata?.full_name || '';
+      const shopName = artisan?.business_name || artisanLegalName || (isKn ? 'ಕುಶಲಕರ್ಮಿಗಳೇ' : 'Artisan');
+      const craftCategory = artisan?.specialization || user?.user_metadata?.craft_category || '';
+      const isVerified = artisan?.verification_status === 'approved';
+      const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url || '';
+      const experienceYears = artisan?.experience_years || null;
+
+      // Craft specific guidance helper
+      let craftGuidance = '';
+      let craftEmblem = '🧵';
+      const specLower = craftCategory.toLowerCase();
+
+      if (specLower.includes('potter')) {
+        craftEmblem = '🏺';
+        craftGuidance = isKn
+          ? 'ಮಣ್ಣಿನ ಮಡಕೆ, ಹೂಜಿ ಅಥವಾ ಟೆರಾಕೋಟಾ ಕಲೆಯ ಫೋಟೋ ತೆಗೆಯಿರಿ. ಮಣ್ಣಿನ ವಿಧ (ಜೇಡಿಮಣ್ಣು, ಕೆಂಪು ಮಣ್ಣು), ಕುಂಬಾರಿಕೆ ಚಕ್ರ/ಕೈ ಕೆಲಸ ಮತ್ತು ಬೆಲೆ ತಿಳಿಸಿ.'
+          : 'Snap a photo of your pottery, terracotta, or clay craft. Describe the clay type, wheel technique, and selling price.';
+      } else if (specLower.includes('handloom') || specLower.includes('textile')) {
+        craftEmblem = '🧵';
+        craftGuidance = isKn
+          ? 'ಕೈಮಗ್ಗ ಸೀರೆ, ಶಾಲು ಅಥವಾ ನೇಯ್ಗೆ ಉತ್ಪನ್ನದ ಫೋಟೋ ತೆಗೆಯಿರಿ. ನೂಲು (ರೇಷ್ಮೆ, ಹತ್ತಿ), ನೇಯ್ಗೆ ವಿನ್ಯಾಸ ಮತ್ತು ಅಳತೆಗಳನ್ನು ಧ್ವನಿಯಲ್ಲಿ ತಿಳಿಸಿ.'
+          : 'Snap a photo of your handloom saree, shawl, or fabric. Mention fiber (pure silk, cotton), weave pattern, and dimensions.';
+      } else if (specLower.includes('wood')) {
+        craftEmblem = '🪵';
+        craftGuidance = isKn
+          ? 'ಮರದ ಕೆತ್ತನೆ, ಚನ್ನಪಟ್ಟಣ ಆಟಿಕೆ ಅಥವಾ ಪೀಠೋಪಕರಣದ ಫೋಟೋ ತೆಗೆಯಿರಿ. ಮರದ ವಿಧ (ತೇಗ, ಹಲಸು, ಆಲೆಮರ) ಮತ್ತು ಬಣ್ಣದ ವಿವರ ತಿಳಿಸಿ.'
+          : 'Snap a photo of your wood carving or traditional wooden toy. Mention wood species, carving details, and finish.';
+      } else if (specLower.includes('metal') || specLower.includes('bidri')) {
+        craftEmblem = '🪙';
+        craftGuidance = isKn
+          ? 'ಬಿದರಿವೇರ್ ಅಥವಾ ಸಾಂಪ್ರದಾಯಿಕ ಲೋಹದ ಕಲೆಯ ಫೋಟೋ ತೆಗೆಯಿರಿ. ಲೋಹ, ಬೆಳ್ಳಿಯ ಕೆತ್ತನೆ (inlay work) ಮತ್ತು ಪಾಲಿಷ್ ವಿವರ ತಿಳಿಸಿ.'
+          : 'Snap a photo of your Bidriware or handcrafted metal craft. Mention metal base, pure silver inlay patterns, and finish.';
+      } else if (specLower.includes('bamboo')) {
+        craftEmblem = '🎋';
+        craftGuidance = isKn
+          ? 'ಬಿದಿರು ಅಥವಾ ಬೆತ್ತದ ಬುಟ್ಟಿ/ಕಲೆಯ ಫೋಟೋ ತೆಗೆಯಿರಿ. ಬಿದಿರಿನ ಪಟ್ಟಿಗಳು ಮತ್ತು ನೈಸರ್ಗಿಕ ಹೆಣಿಗೆಯ ವಿವರಗಳನ್ನು ತಿಳಿಸಿ.'
+          : 'Snap a photo of your bamboo or cane craft. Mention natural fiber weave and intended uses.';
+      } else {
+        craftGuidance = isKn
+          ? 'ನಿಮ್ಮ ಕರಕುಶಲ ಉತ್ಪನ್ನದ ಫೋಟೋ ತೆಗೆದು, ನಿಮ್ಮ ಮಾತಿನಲ್ಲಿ ವಿವರಣೆ ನೀಡಬಹುದು.'
+          : 'Snap a photo of your craft and speak your description in your preferred language.';
+      }
+
       setMessages([
         {
           id: 'welcome_user',
           sender: 'assistant',
+          welcomeCard: {
+            emblem: craftEmblem,
+            avatarUrl: avatarUrl,
+            title: isKn ? `ನಮಸ್ಕಾರ, ${artisanLegalName || shopName}!` : `Namaste, ${artisanLegalName || shopName}!`,
+            subtitle: shopName !== artisanLegalName && shopName ? shopName : (isKn ? 'ಅಧಿಕೃತ ಕುಶಲಕರ್ಮಿ' : 'Authorized Artisan'),
+            specialization: craftCategory || (isKn ? 'ಕರಕುಶಲ' : 'Handicrafts'),
+            experienceYears: experienceYears,
+            isVerified: isVerified,
+            guidance: craftGuidance
+          },
           text: isKn
-            ? `🙏 **ನಮಸ್ಕಾರ, ${shopName}!**\n\nನಾನು ನಿಮ್ಮ ಕರಕುಶಲ AI ಸಹಾಯಕ. ನಿಮ್ಮ ಕರಕುಶಲ ಉತ್ಪನ್ನದ ಫೋಟೋ ತೆಗೆದು, ನಿಮ್ಮ ಮಾತಿನಲ್ಲಿ (ಕನ್ನಡದಲ್ಲಿ) ವಿವರಣೆ ನೀಡಬಹುದು.\n\nಇಂದು ಯಾವ ಉತ್ಪನ್ನವನ್ನು ಪಟ್ಟಿ ಮಾಡಲು ಬಯಸುತ್ತೀರಿ?`
-            : `🙏 **Namaste, ${shopName}!**\n\nI am your conversational AI Assistant. You can snap a photo of your craft and speak your description in your preferred language.\n\nWhat would you like to list today?`,
+            ? `🙏 **ನಮಸ್ಕಾರ, ${shopName}!**\n\nನಾನು ನಿಮ್ಮ ಕರಕುಶಲ AI ಸಹಾಯಕ. ನಿಮ್ಮ **${craftCategory || 'ಕರಕುಶಲ'}** ಉತ್ಪನ್ನಗಳ ವಿವರಗಳನ್ನು ಡಿಜಿಟಲ್ ಮಾರ್ಕೆಟ್‌ಪ್ಲೇಸ್‌ಗೆ ಸುಲಭವಾಗಿ ಸೇರಿಸಲು ನಾನು ಸಿದ್ಧನಾಗಿದ್ದೇನೆ.\n\nಇಂದು ಯಾವ ಹೊಸ ಕರಕುಶಲ ಉತ್ಪನ್ನವನ್ನು ಪಟ್ಟಿ ಮಾಡಲು ಬಯಸುತ್ತೀರಿ?`
+            : `🙏 **Namaste, ${shopName}!**\n\nI am your conversational AI Assistant. I am ready to help you catalog and list your **${craftCategory || 'handcrafted'}** products on the digital marketplace.\n\nWhat craft item would you like to list today?`,
           actionButtons: [
             { label: isKn ? '📸 ಫೋಟೋ ತೆಗೆದು ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '📸 Snap & Add Product', action: 'start_add_product' },
             { label: isKn ? '📦 ನನ್ನ ಉತ್ಪನ್ನಗಳನ್ನು ನೋಡಿ' : '📦 View My Products', action: 'view_products' },
@@ -151,7 +294,7 @@ function HomePage() {
         voiceSessionRef.current = null;
       }
     };
-  }, [user, artisan, authLoading, selectedLanguage, isKn]);
+  }, [user, profile, artisan, authLoading, selectedLanguage, isKn]);
 
   // Helpers to trigger Camera vs Gallery
   const triggerCamera = () => {
@@ -205,6 +348,14 @@ function HomePage() {
         break;
       case 'cancel_flow':
         resetWorkflow(isKn ? "ಕಾರ್ಯಪ್ರವಾಹ ರದ್ದುಗೊಂಡಿದೆ. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?" : "Workflow cancelled. How else can I assist you?");
+        break;
+      case 'refresh_profile':
+        if (refreshProfile) refreshProfile();
+        break;
+      case 'logout':
+        if (signOut) {
+          signOut().then(() => navigate('/login'));
+        }
         break;
       default:
         console.log('Action:', action);
@@ -380,10 +531,27 @@ function HomePage() {
     });
 
     setWorkflowState('awaiting_voice');
+    const craftSpec = (artisan?.specialization || '').toLowerCase();
+    let voiceInstruction = isKn
+      ? "ಫೋಟೋ ಸ್ವೀಕರಿಸಲಾಗಿದೆ! 🎙️ ಈಗ, **ನಿಮ್ಮ ಉತ್ಪನ್ನದ ಬಗ್ಗೆ ಮಾತನಾಡಿ**.\n\nಕೆಳಗಿನ **ಮೈಕ್ರೊಫೋನ್ (Microphone)** ಬಟನ್ ಒತ್ತಿ ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ:\n- ವಸ್ತು (ಉದಾ: ಮಣ್ಣು, ಬಿದಿರು, ರೇಷ್ಮೆ, ಹಿತ್ತಾಳೆ)\n- ತಯಾರಿಕಾ ವಿಧಾನ (ಉದಾ: ಕೈಮಗ್ಗ, ಕುಂಬಾರಿಕೆ ಚಕ್ರ, ಕೈ ಕೆತ್ತನೆ)\n- ಉದ್ದೇಶಿತ ಬೆಲೆ ಮತ್ತು ಅಳತೆ"
+      : "Photo received! 🎙️ Now, **tell me about your product**.\n\nTap the **Microphone** button below to record in your chosen language:\n- Materials (e.g. clay, bamboo, silk, brass)\n- Craft technique (e.g. handloom, potter wheel, carving)\n- Target price or dimensions";
+
+    if (craftSpec.includes('potter')) {
+      voiceInstruction += isKn
+        ? "\n\n💡 *ಸಲಹೆ:* ಮಣ್ಣಿನ ವಿಧ (ಟೆರಾಕೋಟಾ/ಜೇಡಿಮಣ್ಣು), ಚಕ್ರದ ಕೆಲಸ ಮತ್ತು ನೈಸರ್ಗಿಕ ಬಣ್ಣ ತಿಳಿಸಿ."
+        : "\n\n💡 *Tip:* Mention clay type (terracotta/red clay), wheel technique, and glaze.";
+    } else if (craftSpec.includes('handloom') || craftSpec.includes('textile')) {
+      voiceInstruction += isKn
+        ? "\n\n💡 *ಸಲಹೆ:* ನೂಲು (ರೇಷ್ಮೆ/ಹತ್ತಿ), ನೇಯ್ಗೆ ಮಾದರಿ ಮತ್ತು ಅಳತೆಗಳನ್ನು ತಿಳಿಸಿ."
+        : "\n\n💡 *Tip:* Mention yarn (pure silk/cotton), weave border/zari, and dimensions.";
+    } else if (craftSpec.includes('wood')) {
+      voiceInstruction += isKn
+        ? "\n\n💡 *ಸಲಹೆ:* ಮರದ ವಿಧ (ತೇಗ/ಶ್ರೀಗಂಧ/ಹಲಸು), ಕೆತ್ತನೆ ಮತ್ತು ಹೊಳಪು ತಿಳಿಸಿ."
+        : "\n\n💡 *Tip:* Mention wood species (teak/rosewood), carving style, and finish.";
+    }
+
     addAssistantMessage(
-      isKn
-        ? "ಫೋಟೋ ಸ್ವೀಕರಿಸಲಾಗಿದೆ! 🎙️ ಈಗ, **ನಿಮ್ಮ ಉತ್ಪನ್ನದ ಬಗ್ಗೆ ಮಾತನಾಡಿ**.\n\nಕೆಳಗಿನ **ಮೈಕ್ರೊಫೋನ್ (Microphone)** ಬಟನ್ ಒತ್ತಿ ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ:\n- ವಸ್ತು (ಉದಾ: ಮಣ್ಣು, ಬಿದಿರು, ರೇಷ್ಮೆ, ಹಿತ್ತಾಳೆ)\n- ತಯಾರಿಕಾ ವಿಧಾನ (ಉದಾ: ಕೈಮಗ್ಗ, ಕುಂಬಾರಿಕೆ ಚಕ್ರ, ಕೈ ಕೆತ್ತನೆ)\n- ಉದ್ದೇಶಿತ ಬೆಲೆ ಮತ್ತು ಅಳತೆ"
-        : "Photo received! 🎙️ Now, **tell me about your product**.\n\nTap the **Microphone** button below to record in your chosen language:\n- Materials (e.g. clay, bamboo, silk, brass)\n- Craft technique (e.g. handloom, potter wheel, carving)\n- Target price or dimensions",
+      voiceInstruction,
       [{ label: isKn ? '❌ ರದ್ದುಮಾಡಿ' : '❌ Cancel', action: 'cancel_flow' }]
     );
   };
@@ -555,6 +723,7 @@ function HomePage() {
       // Match category against official database categories
       const targetCatName = (listing.category || '').toLowerCase();
       const matchedCat = categories.find((c) => c.name.toLowerCase() === targetCatName)
+        || (artisan?.specialization && categories.find((c) => c.name.toLowerCase() === artisan.specialization.toLowerCase()))
         || categories.find((c) => c.name.toLowerCase() === 'other handicrafts')
         || categories[0];
 
@@ -566,27 +735,38 @@ function HomePage() {
             language: selectedLanguage
           }
         });
-        if (!edgeErr && edgeData && edgeData.product_name) {
-          // Sync edge function data if successful
-          listing.englishTitle = edgeData.product_name || listing.englishTitle;
-          listing.englishDescription = edgeData.description || listing.englishDescription;
+        if (!edgeErr && edgeData) {
+          // Sync edge function data only if genuinely in English (never substitute Kannada for English)
+          if (edgeData.product_name && !isKannadaScript(edgeData.product_name)) {
+            listing.englishTitle = edgeData.product_name;
+          }
+          if (edgeData.description && !isKannadaScript(edgeData.description) && edgeData.description.trim().length > 0) {
+            listing.englishDescription = edgeData.description;
+          }
           if (edgeData.local_title) listing.localTitle = edgeData.local_title;
           if (edgeData.local_description) listing.localDescription = edgeData.local_description;
+          if (typeof edgeData.quantity === 'number' && edgeData.quantity > 0) {
+            listing.stock_quantity = edgeData.quantity;
+            listing.isStockProvisional = false;
+          }
         }
       } catch (e) {
         console.warn('Edge function invoke skipped or fallback used:', e);
       }
 
       const draft = {
-        name: listing.englishTitle, // English title for marketplace
-        local_title: listing.localTitle, // Kannada title in native script
+        name: listing.englishTitle, // Validated English title for marketplace
+        local_title: listing.localTitle, // Local language (Kannada) title in native script
         category_id: matchedCat?.id || '',
         category_name: matchedCat?.name || listing.category || 'Other Handicrafts',
         category: listing.category || 'Other Handicrafts',
-        price: listing.price,
+        price: listing.price, // Null if unvoiced, never fabricated 500
+        isPriceProvisional: listing.isPriceProvisional,
         stock_quantity: listing.stock_quantity,
-        description: listing.englishDescription, // English description for marketplace
-        local_description: listing.localDescription, // Kannada natural description
+        isStockProvisional: listing.isStockProvisional,
+        missingDetails: listing.missingDetails || [],
+        description: listing.englishDescription, // Structured English description for marketplace
+        local_description: listing.localDescription, // Structured Kannada description
         confidence: listing.confidence,
         imageUrl: pendingImagePreview,
         rawTranscript: voiceText,
@@ -664,6 +844,15 @@ function HomePage() {
       return;
     }
 
+    if (targetStatus === 'published' && (!draft.price || Number(draft.price) <= 0)) {
+      addAssistantMessage(
+        isKn
+          ? "⚠️ **ಮಾರಾಟ ಬೆಲೆ ಅಗತ್ಯವಿದೆ:** ಸಾರ್ವಜನಿಕ ಮಾರುಕಟ್ಟೆಗೆ ಪ್ರಕಟಿಸಲು ದಯವಿಟ್ಟು ಮಾರಾಟ ಬೆಲೆಯನ್ನು ತಿಳಿಸಿ (ಉದಾಹರಣೆಗೆ: ಮೈಕ್ ಒತ್ತಿ 'ಬೆಲೆ 450 ಮಾಡಿ' ಎಂದು ಹೇಳಿ ಅಥವಾ ತಿದ್ದಿ)."
+          : "⚠️ **Price Required:** Please provide a valid selling price before publishing to the marketplace (e.g. tap mic and say 'price 450' or click edit)."
+      );
+      return;
+    }
+
     if (targetStatus === 'published' && artisan.verification_status !== 'approved') {
       addAssistantMessage(
         isKn
@@ -691,8 +880,8 @@ function HomePage() {
         description: cleanEnglishDescription,
         local_title: draft.local_title ? draft.local_title.trim() : null,
         local_description: draft.local_description ? draft.local_description.trim() : null,
-        price: Number(draft.price),
-        stock_quantity: Number(draft.stock_quantity),
+        price: Number(draft.price) || 0,
+        stock_quantity: Number(draft.stock_quantity) || 1,
         status: targetStatus
       };
 
@@ -718,8 +907,8 @@ function HomePage() {
             category_id: draft.category_id || categories[0]?.id,
             name: draft.name.trim(),
             description: fallbackCombinedDescription.trim(),
-            price: Number(draft.price),
-            stock_quantity: Number(draft.stock_quantity),
+            price: Number(draft.price) || 0,
+            stock_quantity: Number(draft.stock_quantity) || 1,
             status: targetStatus
           })
           .select()
@@ -945,6 +1134,7 @@ function HomePage() {
               sender={msg.sender}
               text={msg.text}
               media={msg.media}
+              welcomeCard={msg.welcomeCard}
               actionButtons={msg.actionButtons}
               onActionClick={handleActionClick}
               draft={msg.draft}

@@ -8,6 +8,8 @@ import MyEarningsPage from "./pages/MyEarningsPage.jsx";
 import AssistantChatPage from "./pages/AssistantChatPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import WhatsAppPlaceholderPage from "./pages/WhatsAppPlaceholderPage.jsx";
+import CustomerFeedbackPage from "./pages/CustomerFeedbackPage.jsx";
+import ProductPerformancePage from "./pages/ProductPerformancePage.jsx";
 
 function App() {
   return (
@@ -23,6 +25,10 @@ function App() {
           <Route path="/my-earnings" element={<MyEarningsPage />} />
           <Route path="/assistant" element={<AssistantChatPage />} />
           <Route path="/whatsapp" element={<WhatsAppPlaceholderPage />} />
+          <Route path="/customer-feedback" element={<CustomerFeedbackPage />} />
+          <Route path="/reviews" element={<CustomerFeedbackPage />} />
+          <Route path="/product-performance" element={<ProductPerformancePage />} />
+          <Route path="/performance" element={<ProductPerformancePage />} />
         </Routes>
       </Router>
     </AuthProvider>

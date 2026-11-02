@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true, // Exposes server over local network for real phone browser access
-    port: 5174
+    port: 5174,
+    strictPort: true
   }
 });

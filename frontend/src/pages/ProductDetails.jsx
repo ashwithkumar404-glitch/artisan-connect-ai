@@ -6,6 +6,31 @@ import { useCart } from '../lib/CartContext';
 import { createNotification } from '../lib/notifications';
 
 // Clean English description for marketplace, stripping legacy concatenated bilingual portions
+// Parse embedded Kannada listing text if present in legacy/fallback concatenated description
+function parseEmbeddedKannadaListing(desc) {
+  if (!desc) return { localTitle: null, localDescription: null };
+  const sepIdx = desc.indexOf('\n\n---\n');
+  if (sepIdx === -1) return { localTitle: null, localDescription: null };
+
+  const kannadaPart = desc.substring(sepIdx + 6).trim();
+  let localTitle = null;
+  let localDescription = null;
+
+  const titleMatch = kannadaPart.match(/ಶೀರ್ಷಿಕೆ:\s*(.+?)(?:\r?\n|$)/);
+  if (titleMatch && titleMatch[1]) {
+    localTitle = titleMatch[1].trim();
+  }
+
+  const descMatch = kannadaPart.match(/ವಿವರಣೆ:\s*([\s\S]+)$/);
+  if (descMatch && descMatch[1]) {
+    localDescription = descMatch[1].trim();
+  } else if (!localTitle) {
+    localDescription = kannadaPart;
+  }
+
+  return { localTitle, localDescription };
+}
+
 function getCleanEnglishDescription(desc) {
   if (!desc) return '';
   const sepIdx = desc.indexOf('\n\n---\n');
@@ -25,6 +50,7 @@ export default function ProductDetails() {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeDescLang, setActiveDescLang] = useState('en');
 
   // Cart operations
   const [quantity, setQuantity] = useState(1);
@@ -169,13 +195,15 @@ export default function ProductDetails() {
         setLoading(true);
         setError('');
 
-        const { data, error: fetchError } = await supabase
+        let productRes = await supabase
           .from('products')
           .select(`
             id,
             artisan_id,
             name,
+            local_title,
             description,
+            local_description,
             price,
             stock_quantity,
             status,
@@ -199,7 +227,53 @@ export default function ProductDetails() {
           .eq('id', id)
           .maybeSingle();
 
+        // Safe fallback if local_title or local_description column does not exist on remote DB
+        if (productRes.error && (productRes.error.message?.includes('local_title') || productRes.error.message?.includes('local_description'))) {
+          productRes = await supabase
+            .from('products')
+            .select(`
+              id,
+              artisan_id,
+              name,
+              description,
+              price,
+              stock_quantity,
+              status,
+              created_at,
+              categories (
+                name
+              ),
+              product_images (
+                image_url
+              ),
+              artisans (
+                id,
+                business_name,
+                location,
+                verification_status,
+                profiles (
+                  full_name
+                )
+              )
+            `)
+            .eq('id', id)
+            .maybeSingle();
+        }
+
+        const { data, error: fetchError } = productRes;
         if (fetchError) throw fetchError;
+
+        if (data) {
+          if (!data.local_description && data.description?.includes('---')) {
+            const embedded = parseEmbeddedKannadaListing(data.description);
+            if (!data.local_title && embedded.localTitle) {
+              data.local_title = embedded.localTitle;
+            }
+            if (!data.local_description && embedded.localDescription) {
+              data.local_description = embedded.localDescription;
+            }
+          }
+        }
 
         if (active) {
           if (!data || data.status !== 'published' || data.artisans?.verification_status !== 'approved') {
@@ -388,6 +462,11 @@ export default function ProductDetails() {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 m-0">
                 {product.name}
               </h1>
+              {product.local_title && product.local_title !== product.name && (
+                <div className="text-sm font-semibold text-slate-500 pt-0.5">
+                  {product.local_title}
+                </div>
+              )}
               <div className="text-2xl sm:text-3xl font-black text-gov-navy pt-2">
                 ₹{Number(product.price).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
@@ -397,9 +476,35 @@ export default function ProductDetails() {
 
             {/* Description */}
             <div className="space-y-1.5">
-              <h3 className="font-bold text-slate-800 text-sm">Product Description</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-800 text-sm">Product Description</h3>
+                {product.local_description && (
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setActiveDescLang('en')}
+                      className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors cursor-pointer ${
+                        activeDescLang === 'en' ? 'bg-gov-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      English
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDescLang('local')}
+                      className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors cursor-pointer ${
+                        activeDescLang === 'local' ? 'bg-gov-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ಕನ್ನಡ (Original)
+                    </button>
+                  </div>
+                )}
+              </div>
               <p className="text-slate-655 text-sm leading-relaxed whitespace-pre-line">
-                {getCleanEnglishDescription(product.description) || 'No description provided for this handicraft.'}
+                {activeDescLang === 'local' && product.local_description
+                  ? product.local_description
+                  : getCleanEnglishDescription(product.description) || product.local_description || 'No description provided for this handicraft.'}
               </p>
             </div>
           </div>

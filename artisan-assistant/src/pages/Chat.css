@@ -803,38 +803,133 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 1rem;
+  flex-wrap: wrap;
+  row-gap: 0.6rem;
+  column-gap: 0.5rem;
+  padding-bottom: 0.85rem;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 1.25rem;
-  gap: 0.5rem;
+  margin-bottom: 1.1rem;
 }
 
 .login-brand {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .login-logo-icon {
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   flex-shrink: 0;
+  line-height: 1;
+}
+
+.login-brand-text {
+  min-width: 0;
 }
 
 .login-title {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--primary-green);
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
 }
 
 .login-subtitle {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--secondary-text);
   margin: 0.15rem 0 0 0;
+  line-height: 1.2;
+}
+
+.login-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.login-method-tabs {
+  display: flex;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 4px;
+  margin-bottom: 1rem;
+}
+
+.login-tab-btn {
+  flex: 1;
+  padding: 0.48rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.login-tab-btn.active {
+  background: var(--bg);
+  color: var(--primary-green);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .login-tab-btn.active {
+  background: #2a3942;
+  color: #25d366;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.login-alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.btn-retry-action {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--primary-green);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  touch-action: manipulation;
+}
+
+.btn-retry-action:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 380px) {
+  .login-card {
+    padding: 1.1rem 0.85rem;
+    border-radius: 12px;
+  }
+  .login-header-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .login-header-controls {
+    align-self: flex-end;
+  }
+  .login-tab-btn {
+    font-size: 0.76rem;
+    padding: 0.4rem 0.4rem;
+  }
 }
 
 .login-form {
@@ -1115,4 +1210,317 @@
   background: var(--border);
   color: var(--text);
 }
+
+/* ============================================================================
+   Craft-Inspired Artisan Welcome Experience & Animations
+   ============================================================================ */
+
+@keyframes craftEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes craftEmblemPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(7, 94, 84, 0.2);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(7, 94, 84, 0);
+  }
+}
+
+.welcome-craft-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--card-bg, #FFFFFF);
+  border: 1px solid var(--border, #E5E7EB);
+  border-left: 4px solid var(--primary-green, #075E54);
+  border-radius: 12px;
+  padding: 0.85rem;
+  margin-bottom: 0.65rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  animation: craftEntrance 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.welcome-craft-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.welcome-craft-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.6rem;
+  background: var(--light-green, #E7F5EC);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 50%;
+  animation: craftEmblemPulse 3s infinite ease-in-out;
+}
+
+.welcome-craft-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.welcome-craft-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary-green, #075E54);
+  line-height: 1.3;
+}
+
+.welcome-craft-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--secondary-text, #4B5563);
+  line-height: 1.3;
+}
+
+.welcome-specialization-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+}
+
+.specialization-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary-green, #075E54);
+  background: var(--light-green, #E7F5EC);
+  border: 1px solid var(--border, #E5E7EB);
+  padding: 0.25rem 0.55rem;
+  border-radius: 14px;
+}
+
+.welcome-verified-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #15803D;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  padding: 0.2rem 0.45rem;
+  border-radius: 12px;
+}
+
+.welcome-craft-guidance {
+  background: var(--chat-bg, #F8F5EE);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  margin: 0.5rem 0;
+}
+
+.guidance-text {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text, #1F2937);
+  line-height: 1.4;
+}
+
+.welcome-craft-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--border, #E5E7EB);
+}
+
+.welcome-step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.45rem;
+  background: var(--chat-bg, #F8F5EE);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.welcome-step-item:hover {
+  transform: translateX(2px);
+}
+
+.step-icon-circle {
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 50%;
+  background: var(--card-bg, #FFFFFF);
+  border: 1px solid var(--border, #E5E7EB);
+  flex-shrink: 0;
+}
+
+.step-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.step-title {
+  font-size: 0.85rem;
+  color: var(--primary-green, #075E54);
+}
+
+.step-desc {
+  font-size: 0.75rem;
+  color: var(--secondary-text, #4B5563);
+  line-height: 1.25;
+}
+
+/* Accessibility: Reduced-Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .welcome-craft-card,
+  .welcome-craft-emblem,
+  .welcome-step-item,
+  .login-intro-card,
+  .login-form-card,
+  .intro-craft-emblem,
+  .intro-feature-item {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================================================
+   Login Intro Welcome Screen & Sliding Transition (Step 1)
+   ============================================================================ */
+@keyframes loginSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.login-intro-card {
+  animation: loginSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.login-form-card {
+  animation: loginSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.intro-craft-hero {
+  text-align: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.intro-craft-emblems {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.intro-craft-emblem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  font-size: 1.6rem;
+  background: var(--light-green);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  animation: craftEmblemPulse 3s infinite ease-in-out;
+}
+
+.intro-craft-title {
+  margin: 0 0 0.45rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary-green);
+  line-height: 1.3;
+}
+
+.intro-craft-desc {
+  margin: 0 0 1.15rem;
+  font-size: 0.86rem;
+  color: var(--secondary-text);
+  line-height: 1.5;
+}
+
+.intro-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 1.25rem;
+  text-align: left;
+}
+
+.intro-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background: var(--chat-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  transition: transform 0.15s ease;
+}
+
+.intro-feature-item:hover {
+  transform: translateX(2px);
+}
+
+.intro-feature-icon {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.intro-feature-text strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--primary-green);
+  margin-bottom: 0.15rem;
+}
+
+.intro-feature-text span {
+  font-size: 0.78rem;
+  color: var(--secondary-text);
+  line-height: 1.35;
+  display: block;
+}
+
+[data-theme="dark"] .intro-craft-emblem {
+  background: rgba(7, 94, 84, 0.25);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .intro-feature-item {
+  background: var(--chat-bg);
+  border-color: var(--border);
+}
+
 

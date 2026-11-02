@@ -1,0 +1,18 @@
+{
+  "name": "artisan-connect-ai",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev:artisan",
+    "dev:artisan": "npm run dev --prefix artisan-assistant",
+    "dev:marketplace": "npm run dev --prefix frontend",
+    "build": "npm run build:artisan && npm run build:marketplace",
+    "build:artisan": "npm run build --prefix artisan-assistant",
+    "build:marketplace": "npm run build --prefix frontend",
+    "test": "npm test --prefix artisan-assistant",
+    "test:artisan": "npm test --prefix artisan-assistant",
+    "lint:artisan": "npm run lint --prefix artisan-assistant"
+  }
+}
+

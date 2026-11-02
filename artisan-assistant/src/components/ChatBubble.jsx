@@ -11,7 +11,8 @@ function ChatBubble({
   onSaveDraft,
   onPublishDraft,
   onUpdateDraft,
-  language = 'kn'
+  language = 'kn',
+  welcomeCard,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [showEnglishPreview, setShowEnglishPreview] = useState(false);
@@ -78,7 +79,75 @@ function ChatBubble({
         </div>
       )}
 
-      {/* 2. Text Content */}
+      {/* 2. Craft-Inspired Welcome Experience Card */}
+      {welcomeCard && (
+        <div className="welcome-craft-card">
+          <div className="welcome-craft-header">
+            {welcomeCard.avatarUrl ? (
+              <img
+                src={welcomeCard.avatarUrl}
+                alt="Artisan Profile"
+                className="welcome-craft-avatar"
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  minWidth: '44px',
+                  minHeight: '44px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '1.5px solid var(--primary-green)'
+                }}
+              />
+            ) : (
+              <span className="welcome-craft-emblem" aria-hidden="true">{welcomeCard.emblem || '🧵'}</span>
+            )}
+            <div className="welcome-craft-header-text">
+              <h3 className="welcome-craft-title">{welcomeCard.title}</h3>
+              <p className="welcome-craft-subtitle">{welcomeCard.subtitle}</p>
+            </div>
+          </div>
+
+          {welcomeCard.specialization && (
+            <div className="welcome-specialization-row">
+              <span className="specialization-tag">
+                🎨 {welcomeCard.specialization}
+              </span>
+              {welcomeCard.experienceYears && (
+                <span className="specialization-tag" style={{ background: 'var(--chat-bg)' }}>
+                  ⏳ {welcomeCard.experienceYears} {isKn ? 'ವರ್ಷಗಳ ಅನುಭವ' : 'yrs exp'}
+                </span>
+              )}
+              {welcomeCard.isVerified && (
+                <span className="welcome-verified-badge">
+                  ✓ {isKn ? 'ಪರಿಶೀಲಿತ ಕುಶಲಕರ್ಮಿ' : 'Verified Artisan'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {welcomeCard.guidance && (
+            <div className="welcome-craft-guidance">
+              <p className="guidance-text">💡 {welcomeCard.guidance}</p>
+            </div>
+          )}
+
+          {welcomeCard.steps && welcomeCard.steps.length > 0 && (
+            <div className="welcome-craft-steps">
+              {welcomeCard.steps.map((st, idx) => (
+                <div key={idx} className="welcome-step-item">
+                  <div className="step-icon-circle" aria-hidden="true">{st.icon}</div>
+                  <div className="step-details">
+                    <strong className="step-title">{st.title}</strong>
+                    <span className="step-desc">{st.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Text Content */}
       {text && <div style={{ fontSize: '0.9rem' }}>{renderFormattedText(text)}</div>}
 
       {/* 3. Interactive Draft Review & Edit Card */}
@@ -180,11 +249,42 @@ function ChatBubble({
                 {isKn ? 'ವರ್ಗ (Category):' : 'Category:'} <strong>{draft.category_name || draft.category}</strong>
               </div>
 
-              <div className="draft-price-badge">
-                ₹{draft.price} INR <span style={{ fontWeight: 'normal', fontSize: '0.75rem' }}>
-                  ({isKn ? 'ದಾಸ್ತಾನು' : 'Stock'}: {draft.stock_quantity})
+              <div className="draft-price-badge" style={{
+                background: !draft.price || Number(draft.price) <= 0 ? 'rgba(239, 68, 68, 0.12)' : undefined,
+                color: !draft.price || Number(draft.price) <= 0 ? '#DC2626' : undefined,
+                border: !draft.price || Number(draft.price) <= 0 ? '1px solid rgba(239, 68, 68, 0.3)' : undefined
+              }}>
+                {draft.price && Number(draft.price) > 0 ? (
+                  <>₹{draft.price} INR</>
+                ) : (
+                  <span style={{ fontWeight: 700 }}>
+                    {isKn ? '⚠️ ಬೆಲೆ ನಮೂದಿಸಿಲ್ಲ (Price Required)' : '⚠️ Price Missing - Required'}
+                  </span>
+                )}
+                <span style={{ fontWeight: 'normal', fontSize: '0.75rem', marginLeft: '0.35rem' }}>
+                  ({isKn ? 'ದಾಸ್ತಾನು' : 'Stock'}: {draft.stock_quantity}
+                  {draft.isStockProvisional ? (isKn ? ' - ದೃಢೀಕರಿಸಿ' : ' - To confirm') : ''})
                 </span>
               </div>
+
+              {draft.missingDetails && draft.missingDetails.length > 0 && (
+                <div style={{
+                  marginTop: '0.4rem',
+                  padding: '0.4rem 0.6rem',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  color: '#B45309'
+                }}>
+                  <strong>{isKn ? '📌 ದೃಢೀಕರಿಸಬೇಕಾದ ವಿವರಗಳು:' : '📌 Details to confirm:'}</strong>
+                  <ul style={{ margin: '0.2rem 0 0 1rem', padding: 0 }}>
+                    {draft.missingDetails.map((m, idx) => (
+                      <li key={idx}>{isKn ? m.prompt_kn : m.prompt_en}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="draft-desc" style={{ marginTop: '0.4rem' }}>
                 {isKn ? (draft.local_description || draft.description) : draft.description}

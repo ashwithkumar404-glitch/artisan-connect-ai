@@ -5,8 +5,11 @@ function QuickActions() {
   const actions = [
     { label: 'Add New Product', to: '/add-product' },
     { label: 'View My Products', to: '/my-products' },
-    { label: 'How It Works', to: '/', disabled: true }, // placeholder
     { label: 'My Orders', to: '/my-orders' },
+    { label: 'My Earnings', to: '/my-earnings' },
+    { label: 'Performance', to: '/product-performance' },
+    { label: 'Customer Reviews', to: '/customer-feedback' },
+    { label: 'WhatsApp Channel', to: '/whatsapp' },
   ];
   return (
     <div className="quick-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>

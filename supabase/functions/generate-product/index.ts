@@ -54,12 +54,13 @@ const SELLING_PRICE_PATTERNS = [
 
 // Patterns to detect explicit stock quantity mentions
 const QUANTITY_PATTERNS = [
-  /\b(?:stock(?:\s*of)?|quantity(?:\s*of)?|total(?:\s*of)?|i\s*have|we\s*have)\s*(\d{1,4})\s*(?:pieces|items|units|pcs|baskets|pots|sarees|shawls|vases|boxes)?\b/i,
-  /\b(?:made)\s*(\d{1,4})\s*(?:pieces|items|units|pcs|baskets|pots|sarees|shawls|vases|boxes)?\b/i,
-  /\b(\d{1,4})\s*(?:pieces|items|units|pcs)\s*(?:available|in\s*stock|ready)?\b/i,
+  /\b(?:stock(?:\s*of)?|quantity(?:\s*of)?|total(?:\s*of)?|i\s*have|we\s*have|made|available|ready)\s*(?:around|about)?\s*(\d{1,4})\s*(?:pieces|items|units|pcs|baskets|pots|sarees|shawls|vases|boxes)?\b/i,
+  /\b(\d{1,4})\s*(?:pieces|items|units|pcs|baskets|pots|sarees|shawls|vases|boxes|toys|crafts)\b/i,
+  /\b(\d{1,4})\s*(?:available|in\s*stock|ready)\b/i,
   // Kannada quantity patterns
-  /\b(\d{1,4})\s*(?:ತುಂಡುಗಳು|ಸಂಖ್ಯೆ|ಐಟಂಗಳು|ಪೀಸ್|ಮಡಕೆಗಳು|ಬುಟ್ಟಿಗಳು|ಸೀರೆಗಳು)\b/iu,
-  /\b(?:ದಾಸ್ತಾನು|ಪ್ರಮಾಣ)\s*(\d{1,4})\b/iu,
+  /(?:ದಾಸ್ತಾನು|ಪ್ರಮಾಣ|ಸಂಖ್ಯೆ|ಬಳಿ\s*ಇರುವ|ಮಾಡಿದ)\s*(?:ಸುಮಾರು|ಅಂದಾಜು)?\s*(\d{1,4})/iu,
+  /(\d{1,4})\s*(?:ತುಂಡುಗಳು|ತುಂಡು|ಸಂಖ್ಯೆ|ಐಟಂಗಳು|ಐಟಂ|ಪೀಸ್|ಯೂನಿಟ್|ಮಡಕೆಗಳು|ಮಡಕೆ|ಬುಟ್ಟಿಗಳು|ಬುಟ್ಟಿ|ಸೀರೆಗಳು|ಸೀರೆ|units?)/iu,
+  /(\d{1,4})\s*(?:ದಾಸ್ತಾನು\s*ಇದೆ|ಬಾಕಿ\s*ಇದೆ|ಸಿದ್ಧವಾಗಿದೆ|ಇವೆ|ಇದೆ)/iu,
 ];
 
 // English stop words for keyword extraction
@@ -219,6 +220,50 @@ function generateSanitizedDescription(text: string): string {
   return sanitized || text.trim();
 }
 
+// Generate a structured English marketplace description from artisan inputs and detected facts
+function generateEnglishDescription(text: string, category: string): string {
+  const isKn = /[\u0C80-\u0CFF]/.test(text);
+  const normalized = text.toLowerCase();
+
+  // If text is already primarily English with substantial content, sanitize costs and format
+  if (!isKn && text.length > 20) {
+    return generateSanitizedDescription(text);
+  }
+
+  const parts: string[] = [];
+  const cleanTitle = generateCleanTitle(text, category);
+  parts.push(`This is an authentic ${cleanTitle.toLowerCase()} handcrafted by traditional Indian artisans.`);
+
+  // Detect specific craft materials/techniques
+  if (normalized.includes('ಜೇಡಿಮಣ್ಣು') || normalized.includes('clay') || normalized.includes('terracotta')) {
+    parts.push('Crafted from natural eco-friendly terracotta clay using traditional potter wheel techniques.');
+  } else if (normalized.includes('ಬಿದಿರು') || normalized.includes('bamboo')) {
+    parts.push('Intricately hand-woven from sustainably sourced natural bamboo and wild fiber.');
+  } else if (normalized.includes('ರೇಷ್ಮೆ') || normalized.includes('silk')) {
+    parts.push('Woven from pure natural silk yarn on authentic heritage handlooms.');
+  } else if (normalized.includes('ಹತ್ತಿ') || normalized.includes('cotton')) {
+    parts.push('Crafted from pure breathable handloom cotton.');
+  } else if (normalized.includes('ಮರ') || normalized.includes('wood') || normalized.includes('ಚನ್ನಪಟ್ಟಣ')) {
+    parts.push('Crafted from seasoned natural wood using authentic hand-turning and non-toxic lacquer techniques.');
+  } else if (normalized.includes('ಹಿತ್ತಾಳೆ') || normalized.includes('brass')) {
+    parts.push('Cast in solid brass with authentic hand-carved detailing.');
+  } else if (normalized.includes('ತಾಮ್ರ') || normalized.includes('copper')) {
+    parts.push('Handcrafted from pure hammered copper.');
+  }
+
+  // Detect intended use
+  if (normalized.includes('ತಂಪಾಗಿಸಲು') || normalized.includes('ನೀರು') || normalized.includes('cooling')) {
+    parts.push('Designed for natural water cooling and traditional daily use.');
+  } else if (normalized.includes('ಪೂಜೆ') || normalized.includes('puja')) {
+    parts.push('Designed for religious rituals and sacred altar decoration.');
+  } else if (normalized.includes('ಅಲಂಕಾರ') || normalized.includes('decor')) {
+    parts.push('Designed as an elegant traditional home decor centerpiece.');
+  }
+
+  parts.push('Every piece is individually handcrafted, celebrating genuine regional heritage and skilled workmanship.');
+  return parts.join(' ');
+}
+
 function extractKeywords(text: string, category: string, maxKeywords = 8): string[] {
   const words = (text + ' ' + category)
     .toLowerCase()
@@ -309,9 +354,9 @@ Deno.serve(async (req) => {
     const product_name = generateCleanTitle(combinedText, category);
     const local_title = generateLocalTitle(combinedText, category);
 
-    // 3. Description Generation with strict cost privacy
-    const description = generateSanitizedDescription(combinedText);
-    const local_description = `ಸಾಂಪ್ರದಾಯಿಕ ಕಲೆಯ ನೈಜ ಸೃಷ್ಟಿ: ಈ ಸುಂದರ ಕರಕುಶಲ ಉತ್ಪನ್ನವನ್ನು ಸ್ಥಳೀಯ ನುರಿತ ಕುಶಲಕರ್ಮಿಗಳು ರೂಪಿಸಿದ್ದಾರೆ. ${description}`;
+    // 3. Description Generation with strict cost privacy and genuine English marketplace output
+    const description = generateEnglishDescription(combinedText, category);
+    const local_description = `ಸಾಂಪ್ರದಾಯಿಕ ಕಲೆಯ ನೈಜ ಸೃಷ್ಟಿ: ಈ ಸುಂದರ ಕರಕುಶಲ ಉತ್ಪನ್ನವನ್ನು ಸ್ಥಳೀಯ ನುರಿತ ಕುಶಲಕರ್ಮಿಗಳು ರೂಪಿಸಿದ್ದಾರೆ. ${generateSanitizedDescription(combinedText)}`;
 
     // 4. Quantity Detection
     const quantity = detectQuantity(combinedText);

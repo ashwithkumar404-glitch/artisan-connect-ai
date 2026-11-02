@@ -458,12 +458,41 @@ notifications
 
 ---
 
+# 🚀 Running the Applications
+
+The repository contains two separate applications:
+
+### 1. 🏺 Artisan Assistant (Artisan Voice & WhatsApp-Style Assistant)
+* **Start command (from root):** `npm run dev:artisan` (or `npm run dev`)
+* **Alternative command:** `cd artisan-assistant && npm run dev`
+* **Local URL:** `http://localhost:5174/`
+* **WhatsApp Conversational Route:** `http://localhost:5174/whatsapp`
+* **Features:** Mobile-first voice/photo catalog assistant, continuous Kannada/English voice recognition, fact extraction, bilingual draft review, WhatsApp-style workflow, orders, earnings, performance analytics, and customer reviews.
+
+### 2. 🛍️ Customer Marketplace (Buyer Exploration & E-Commerce)
+* **Start command (from root):** `npm run dev:marketplace`
+* **Alternative command:** `cd frontend && npm run dev`
+* **Local URL:** `http://localhost:5173/`
+* **Features:** Product exploration, filter by crafts, product details, cart, checkout, order tracking, and reviews.
+
+---
+
 # 📂 Application Structure
 
 ```text
 Artisan-Connect-AI/
 │
-├── frontend/
+├── artisan-assistant/         # Dedicated Artisan Assistant application (Port 5174)
+│   ├── src/
+│   │   ├── components/        # Mobile-first components, Drawer, ThemeToggle, QuickActions
+│   │   ├── pages/             # HomePage, WhatsAppPlaceholderPage, CustomerFeedbackPage, ProductPerformancePage
+│   │   ├── lib/               # voiceRecognition, kannadaProductEngine, supabaseClient, AuthContext
+│   │   └── App.jsx
+│   ├── tests/                 # Unit & integration test suites
+│   ├── package.json
+│   └── vite.config.js         # Configured for Port 5174 (strictPort: true, host: true)
+│
+├── frontend/                  # Customer Marketplace application (Port 5173)
 │   ├── src/
 │   │   ├── components/
 │   │   ├── pages/

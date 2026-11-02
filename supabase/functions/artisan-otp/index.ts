@@ -42,12 +42,25 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json();
 
-    // Environment & non-production isolation detection
-    const envMode = (Deno.env.get('ENVIRONMENT') || Deno.env.get('DENO_ENV') || 'development').toLowerCase();
-    const isProduction = envMode === 'production' || Deno.env.get('NODE_ENV') === 'production';
+    // Environment & non-production isolation detection (Strict Fail-Closed)
+    const envVal = (Deno.env.get('ENVIRONMENT') || '').trim().toLowerCase();
+    const denoEnvVal = (Deno.env.get('DENO_ENV') || '').trim().toLowerCase();
+    const nodeEnvVal = (Deno.env.get('NODE_ENV') || '').trim().toLowerCase();
+
+    // Any production flag forces production mode
+    const anyProduction = envVal === 'production' || denoEnvVal === 'production' || nodeEnvVal === 'production';
+    // Explicit whitelist of non-production environments
+    const isExplicitNonProd = ['development', 'test', 'local'].includes(envVal) ||
+      ['development', 'test', 'local'].includes(denoEnvVal) ||
+      ['development', 'test', 'local'].includes(nodeEnvVal);
+
+    // Fail closed: If any variable is 'production', or if environment is unspecified/ambiguous, treat as production
+    const isProduction = anyProduction || !isExplicitNonProd;
+
     const allowDevTestOtp = !isProduction && (
       Deno.env.get('DEV_ALLOW_TEST_OTP') === 'true' ||
-      envMode === 'test'
+      envVal === 'test' ||
+      denoEnvVal === 'test'
     );
     const configuredDevOtp = allowDevTestOtp ? Deno.env.get('DEV_TEST_OTP_CODE') : null;
 
@@ -82,21 +95,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Request rate-limiting: maximum 3 challenge requests per 60 seconds
-      const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-      const { data: recentChallenges } = await supabase
-        .from('artisan_otp_challenges')
-        .select('id')
-        .eq('artisan_id_code', normalizedCode)
-        .gt('created_at', oneMinuteAgo);
-
-      if (recentChallenges && recentChallenges.length >= 3) {
-        return new Response(
-          JSON.stringify({ error: 'Too many OTP requests. Please wait 60 seconds before requesting another code.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       // Generate OTP:
       // If isolated development testing is explicitly enabled and DEV_TEST_OTP_CODE is set in server secrets,
       // use that configured development code. Otherwise, generate cryptographically secure random 6-digit OTP.
@@ -112,21 +110,26 @@ Deno.serve(async (req: Request) => {
       const otpHash = await sha256(`${normalizedCode}_${generatedOtp}`);
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5-minute expiry
 
-      // Insert rate-limited challenge record
-      const { data: challengeRecord, error: chalInsertErr } = await supabase
-        .from('artisan_otp_challenges')
-        .insert({
-          artisan_id_code: normalizedCode,
-          phone_number: registryRecord.phone_number,
-          otp_hash: otpHash,
-          expires_at: expiresAt,
-          attempts: 0,
-        })
-        .select('id')
-        .single();
+      // Atomic challenge creation with transaction-level advisory lock & rate limiting (max 3 per 60s)
+      const { data: createdChallengeId, error: chalInsertErr } = await supabase.rpc(
+        'create_otp_challenge',
+        {
+          p_artisan_id_code: normalizedCode,
+          p_phone_number: registryRecord.phone_number,
+          p_otp_hash: otpHash,
+          p_expires_at: expiresAt,
+          p_max_attempts: 5,
+        }
+      );
 
       if (chalInsertErr) {
-        console.error('Error inserting OTP challenge:', chalInsertErr);
+        if (chalInsertErr.message?.includes('RATE_LIMIT_EXCEEDED')) {
+          return new Response(
+            JSON.stringify({ error: 'Too many OTP requests. Please wait 60 seconds before requesting another code.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.error('Error creating OTP challenge via RPC:', chalInsertErr);
         return new Response(
           JSON.stringify({ error: 'Failed to generate OTP challenge. Please try again.' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -182,7 +185,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: true,
-          challengeId: challengeRecord?.id,
+          challengeId: createdChallengeId,
           artisanIdCode: normalizedCode,
           maskedPhone: maskPhoneNumber(registryRecord.phone_number),
           providerConfigured: smsDispatched,
@@ -205,68 +208,77 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Fetch active, unverified challenge matching artisan code (and challengeId if provided)
-      let chalQuery = supabase
-        .from('artisan_otp_challenges')
-        .select('*')
-        .eq('artisan_id_code', normalizedCode)
-        .is('verified_at', null)
-        .gt('expires_at', new Date().toISOString());
-
-      if (challengeId) {
-        chalQuery = chalQuery.eq('id', challengeId);
+      if (!challengeId) {
+        return new Response(
+          JSON.stringify({ error: 'Challenge ID is required for OTP verification.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      const { data: challenge, error: chalErr } = await chalQuery
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const inputHash = await sha256(`${normalizedCode}_${trimmedOtp}`);
 
-      if (chalErr || !challenge) {
+      // Unified atomic verification: acquires exclusive row lock (FOR UPDATE),
+      // evaluates attempt limits/expiry, consumes challenge, or atomically increments attempts.
+      const { data: verifyResult, error: verifyRpcErr } = await supabase.rpc(
+        'verify_otp_challenge',
+        {
+          p_challenge_id: challengeId,
+          p_artisan_id_code: normalizedCode,
+          p_candidate_hash: inputHash,
+        }
+      );
+
+      if (verifyRpcErr) {
+        console.error('Error invoking verify_otp_challenge RPC:', verifyRpcErr);
+        return new Response(
+          JSON.stringify({ error: 'Failed to verify OTP. Please try again.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const result = Array.isArray(verifyResult) ? verifyResult[0] : verifyResult;
+      const verifyStatus = result?.status;
+
+      if (verifyStatus === 'not_found' || verifyStatus === 'expired' || verifyStatus === 'already_verified') {
         return new Response(
           JSON.stringify({ error: 'OTP has expired, is invalid, or has already been used. Please request a new code.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      if (challenge.attempts >= challenge.max_attempts) {
+      if (verifyStatus === 'max_attempts_exceeded') {
         return new Response(
           JSON.stringify({ error: 'Maximum verification attempts exceeded. Please request a new OTP.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      const inputHash = await sha256(`${normalizedCode}_${trimmedOtp}`);
-      if (inputHash !== challenge.otp_hash) {
-        const nextAttempts = challenge.attempts + 1;
-        await supabase
-          .from('artisan_otp_challenges')
-          .update({ attempts: nextAttempts })
-          .eq('id', challenge.id);
-
-        const remaining = challenge.max_attempts - nextAttempts;
+      if (verifyStatus === 'invalid_otp') {
+        const remaining = result?.remaining_attempts ?? 0;
         return new Response(
           JSON.stringify({ error: `Invalid OTP. ${Math.max(0, remaining)} attempts remaining.` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Mark challenge verified immediately to ensure it cannot be reused
-      await supabase
-        .from('artisan_otp_challenges')
-        .update({ verified_at: new Date().toISOString() })
-        .eq('id', challenge.id);
+      if (verifyStatus !== 'verified') {
+        return new Response(
+          JSON.stringify({ error: 'OTP verification failed. Please try again.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-      // Fetch artisan details from registry
+      // Fetch artisan details from registry (must remain active)
       const { data: registryRecord, error: regFetchErr } = await supabase
         .from('artisan_registry')
         .select('*')
         .eq('artisan_id_code', normalizedCode)
+        .eq('is_active', true)
         .maybeSingle();
 
       if (regFetchErr || !registryRecord) {
         return new Response(
-          JSON.stringify({ error: 'Registry record not found for verified artisan ID.' }),
+          JSON.stringify({ error: 'Registry record not found or inactive for verified artisan ID.' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -276,48 +288,37 @@ Deno.serve(async (req: Request) => {
       let targetUserId: string | null = null;
       let targetEmail: string = deterministicEmail;
 
-      // Check if existing profile matches registry phone number
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, email, phone')
-        .eq('phone', registryRecord.phone_number)
-        .maybeSingle();
+      // Safe account resolution: Bind strictly to deterministic artisan email or verified artisan_id_code metadata.
+      // Do NOT link to existing accounts via unverified phone numbers in public profiles.
+      try {
+        const { data: userList } = await supabase.auth.admin.listUsers();
+        const existingAuthUser = userList?.users?.find(
+          (u: any) => u.email === deterministicEmail || u.user_metadata?.artisan_id_code === normalizedCode
+        );
 
-      if (existingProfile) {
-        targetUserId = existingProfile.id;
-        if (existingProfile.email) targetEmail = existingProfile.email;
-      } else {
-        // Query auth users to find existing user or create one
-        try {
-          const { data: userList } = await supabase.auth.admin.listUsers();
-          const existingAuthUser = userList?.users?.find(
-            (u: any) => u.email === deterministicEmail || u.phone === registryRecord.phone_number
-          );
+        if (existingAuthUser) {
+          targetUserId = existingAuthUser.id;
+          targetEmail = existingAuthUser.email || deterministicEmail;
+        } else {
+          const { data: newUserData, error: createErr } = await supabase.auth.admin.createUser({
+            email: deterministicEmail,
+            phone: registryRecord.phone_number,
+            email_confirm: true,
+            phone_confirm: true,
+            user_metadata: {
+              full_name: registryRecord.full_name,
+              role: 'artisan',
+              artisan_id_code: normalizedCode,
+            },
+          });
 
-          if (existingAuthUser) {
-            targetUserId = existingAuthUser.id;
-            targetEmail = existingAuthUser.email || deterministicEmail;
-          } else {
-            const { data: newUserData, error: createErr } = await supabase.auth.admin.createUser({
-              email: deterministicEmail,
-              phone: registryRecord.phone_number,
-              email_confirm: true,
-              phone_confirm: true,
-              user_metadata: {
-                full_name: registryRecord.full_name,
-                role: 'artisan',
-                artisan_id_code: normalizedCode,
-              },
-            });
-
-            if (!createErr && newUserData?.user) {
-              targetUserId = newUserData.user.id;
-              targetEmail = newUserData.user.email || deterministicEmail;
-            }
+          if (!createErr && newUserData?.user) {
+            targetUserId = newUserData.user.id;
+            targetEmail = newUserData.user.email || deterministicEmail;
           }
-        } catch (authAdminErr) {
-          console.warn('Auth admin user query error:', authAdminErr);
         }
+      } catch (authAdminErr) {
+        console.warn('Auth admin user query error:', authAdminErr);
       }
 
       // Upsert profile and artisan record if user ID resolved
