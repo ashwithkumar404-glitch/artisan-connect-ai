@@ -13,11 +13,19 @@ function CustomerFeedbackPage() {
 
   const [reviews, setReviews] = useState([]);
   const [productsMap, setProductsMap] = useState(new Map());
+  const [customersMap, setCustomersMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [filterRating, setFilterRating] = useState('all'); // 'all' | '5' | '4' | 'critical'
   const [activeReplyId, setActiveReplyId] = useState(null);
   const [replyDrafts, setReplyDrafts] = useState(new Map());
+  const [savedReplies, setSavedReplies] = useState(() => {
+    try {
+      return new Map(JSON.parse(localStorage.getItem('artisan_saved_review_replies') || '[]'));
+    } catch {
+      return new Map();
+    }
+  });
   const [copiedId, setCopiedId] = useState(null);
 
   // Sync language
@@ -55,31 +63,37 @@ function CustomerFeedbackPage() {
       setProductsMap(pMap);
       const productIds = prods.map(p => p.id);
 
-      // 2. Fetch product reviews with customer profiles
+      // 2. Fetch product reviews directly without invalid embedded relation join
       const { data: revData, error: revErr } = await supabase
         .from('product_reviews')
-        .select(`
-          id,
-          product_id,
-          customer_id,
-          rating,
-          review_text,
-          photo_url,
-          created_at,
-          profiles (
-            full_name
-          )
-        `)
+        .select('id, product_id, customer_id, rating, review_text, photo_url, created_at')
         .in('product_id', productIds)
         .order('created_at', { ascending: false });
 
       if (revErr) throw revErr;
 
-      setReviews(revData || []);
+      const reviewList = revData || [];
+      setReviews(reviewList);
+
+      // Safe lookup for customer profiles if permitted, fallback to Verified Buyer
+      const customerIds = [...new Set(reviewList.map(r => r.customer_id).filter(Boolean))];
+      if (customerIds.length > 0) {
+        try {
+          const { data: profData } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', customerIds);
+          if (profData && profData.length > 0) {
+            setCustomersMap(new Map(profData.map(p => [p.id, p.full_name])));
+          }
+        } catch {
+          // Graceful fallback under privacy policy
+        }
+      }
 
       // Initialize AI reply suggestions for reviews
       const initialReplies = new Map();
-      (revData || []).forEach(r => {
+      reviewList.forEach(r => {
         const rating = Number(r.rating) || 5;
         if (rating >= 4) {
           initialReplies.set(r.id, isKn
@@ -147,6 +161,20 @@ function CustomerFeedbackPage() {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     }
+  };
+
+  // Save artisan reply (persisted in localStorage and UI state)
+  const handleSaveReply = (id, text) => {
+    if (!text || !text.trim()) return;
+    const updated = new Map(savedReplies);
+    updated.set(id, text.trim());
+    setSavedReplies(updated);
+    try {
+      localStorage.setItem('artisan_saved_review_replies', JSON.stringify(Array.from(updated.entries())));
+    } catch (err) {
+      console.warn('Failed to save review reply:', err);
+    }
+    setActiveReplyId(null);
   };
 
   if (authLoading) {
@@ -357,10 +385,12 @@ function CustomerFeedbackPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {filteredReviews.map((rev) => {
             const prod = productsMap.get(rev.product_id);
-            const customerName = rev.profiles?.full_name || (isKn ? 'ಪರಿಶೀಲಿತ ಖರೀದಿದಾರ' : 'Verified Buyer');
+            const customerName = customersMap.get(rev.customer_id) || rev.profiles?.full_name || (isKn ? 'ಪರಿಶೀಲಿತ ಖರೀದಿದಾರ' : 'Verified Buyer');
             const reviewDate = rev.created_at ? new Date(rev.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '';
             const isReplying = activeReplyId === rev.id;
             const currentReplyText = replyDrafts.get(rev.id) || '';
+            const hasSavedReply = savedReplies.has(rev.id);
+            const savedReplyText = savedReplies.get(rev.id);
 
             return (
               <div
@@ -409,96 +439,176 @@ function CustomerFeedbackPage() {
                   </div>
                 )}
 
-                {/* AI Reply Section */}
-                <div style={{ background: 'var(--chat-bg, #f8f5ee)', borderRadius: '8px', padding: '0.65rem 0.8rem', border: '1px solid var(--border)', marginTop: '0.6rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--primary-green)' }}>
-                      ✨ {isKn ? 'AI ಪ್ರತಿಕ್ರಿಯೆ ಕರಡು (Suggested Reply)' : 'AI-Assisted Reply Draft'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveReplyId(isReplying ? null : rev.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--primary-green)',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        padding: 0
-                      }}
-                    >
-                      {isReplying ? (isKn ? 'ಮುಚ್ಚಿ ▲' : 'Close ▲') : (isKn ? 'ತಿದ್ದಿ / ಸಂಪಾದಿಸಿ ✏️' : 'Edit ✏️')}
-                    </button>
-                  </div>
-
-                  {isReplying ? (
-                    <div style={{ marginTop: '0.4rem' }}>
-                      <textarea
-                        rows={3}
-                        value={currentReplyText}
-                        onChange={(e) => {
-                          const updated = new Map(replyDrafts);
-                          updated.set(rev.id, e.target.value);
-                          setReplyDrafts(updated);
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--border)',
-                          background: 'var(--card-bg, #ffffff)',
-                          color: 'var(--text)',
-                          fontSize: '0.82rem',
-                          fontFamily: 'inherit',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '0.35rem' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyReply(rev.id, currentReplyText)}
-                          style={{
-                            background: copiedId === rev.id ? '#16a34a' : 'var(--primary-green)',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            borderRadius: '4px',
-                            padding: '0.3rem 0.65rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {copiedId === rev.id ? '✓ ' + (isKn ? 'ಕಾಪಿ ಮಾಡಲಾಗಿದೆ' : 'Copied!') : (isKn ? 'ಕಾಪಿ ಮಾಡಿ' : 'Copy Response')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--secondary-text)', lineHeight: 1.4, flex: 1 }}>
-                        {currentReplyText}
-                      </p>
+                {/* Saved Artisan Reply Display */}
+                {hasSavedReply && !isReplying && (
+                  <div
+                    style={{
+                      background: 'rgba(7, 94, 84, 0.08)',
+                      borderRadius: '8px',
+                      padding: '0.65rem 0.8rem',
+                      border: '1px solid var(--primary-green)',
+                      marginTop: '0.6rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--primary-green)' }}>
+                        ✓ {isKn ? 'ನಿಮ್ಮ ಪ್ರತ್ಯುತ್ತರ (Your Reply)' : 'Your Response to Customer'}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => handleCopyReply(rev.id, currentReplyText)}
-                        title="Copy to clipboard"
+                        onClick={() => {
+                          setActiveReplyId(rev.id);
+                          const drafts = new Map(replyDrafts);
+                          drafts.set(rev.id, savedReplyText);
+                          setReplyDrafts(drafts);
+                        }}
                         style={{
-                          background: copiedId === rev.id ? '#16a34a' : 'var(--card-bg, #ffffff)',
-                          color: copiedId === rev.id ? '#FFFFFF' : 'var(--primary-green)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          padding: '0.25rem 0.5rem',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary-green)',
                           fontSize: '0.72rem',
                           fontWeight: 600,
                           cursor: 'pointer',
-                          flexShrink: 0
+                          padding: 0
                         }}
                       >
-                        {copiedId === rev.id ? '✓' : (isKn ? 'ಕಾಪಿ' : 'Copy')}
+                        {isKn ? 'ತಿದ್ದಿ ✏️' : 'Edit ✏️'}
                       </button>
                     </div>
-                  )}
-                </div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text)', lineHeight: 1.45 }}>
+                      "{savedReplyText}"
+                    </p>
+                  </div>
+                )}
+
+                {/* AI Reply / Edit Section */}
+                {(!hasSavedReply || isReplying) && (
+                  <div style={{ background: 'var(--chat-bg, #f8f5ee)', borderRadius: '8px', padding: '0.65rem 0.8rem', border: '1px solid var(--border)', marginTop: '0.6rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--primary-green)' }}>
+                        ✨ {isKn ? 'AI ಪ್ರತಿಕ್ರಿಯೆ ಕರಡು (Suggested Reply)' : 'AI-Assisted Reply Draft'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveReplyId(isReplying ? null : rev.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary-green)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        {isReplying ? (isKn ? 'ಮುಚ್ಚಿ ▲' : 'Close ▲') : (isKn ? 'ತಿದ್ದಿ / ಸಂಪಾದಿಸಿ ✏️' : 'Edit ✏️')}
+                      </button>
+                    </div>
+
+                    {isReplying ? (
+                      <div style={{ marginTop: '0.4rem' }}>
+                        <textarea
+                          rows={3}
+                          value={currentReplyText}
+                          onChange={(e) => {
+                            const updated = new Map(replyDrafts);
+                            updated.set(rev.id, e.target.value);
+                            setReplyDrafts(updated);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border)',
+                            background: 'var(--card-bg, #ffffff)',
+                            color: 'var(--text)',
+                            fontSize: '0.82rem',
+                            fontFamily: 'inherit',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyReply(rev.id, currentReplyText)}
+                            style={{
+                              background: copiedId === rev.id ? '#16a34a' : 'var(--card-bg, #ffffff)',
+                              color: copiedId === rev.id ? '#FFFFFF' : 'var(--primary-green)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '4px',
+                              padding: '0.3rem 0.65rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {copiedId === rev.id ? '✓ ' + (isKn ? 'ಕಾಪಿ ಆಗಿದೆ' : 'Copied!') : (isKn ? 'ಕಾಪಿ ಮಾಡಿ' : 'Copy')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveReply(rev.id, currentReplyText)}
+                            style={{
+                              background: 'var(--primary-green)',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '0.3rem 0.75rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💾 {isKn ? 'ಉತ್ತರ ಉಳಿಸಿ' : 'Save Reply'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--secondary-text)', lineHeight: 1.4, flex: 1 }}>
+                          {currentReplyText}
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.3rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyReply(rev.id, currentReplyText)}
+                            title="Copy to clipboard"
+                            style={{
+                              background: copiedId === rev.id ? '#16a34a' : 'var(--card-bg, #ffffff)',
+                              color: copiedId === rev.id ? '#FFFFFF' : 'var(--primary-green)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '4px',
+                              padding: '0.25rem 0.5rem',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              flexShrink: 0
+                            }}
+                          >
+                            {copiedId === rev.id ? '✓' : (isKn ? 'ಕಾಪಿ' : 'Copy')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveReply(rev.id, currentReplyText)}
+                            title="Save this reply"
+                            style={{
+                              background: 'var(--primary-green)',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '0.25rem 0.5rem',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              flexShrink: 0
+                            }}
+                          >
+                            💾 {isKn ? 'ಉಳಿಸಿ' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

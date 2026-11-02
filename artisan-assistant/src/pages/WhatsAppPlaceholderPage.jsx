@@ -100,7 +100,9 @@ function WhatsAppPlaceholderPage() {
       actionButtons: [
         { label: isKn ? '📷 ಕ್ಯಾಮೆರಾ ಬಳಸಿ' : '📷 Take Photo', action: 'open_camera' },
         { label: isKn ? '🖼️ ಗ್ಯಾಲರಿಯಿಂದ ಆಯ್ಕೆ' : '🖼️ Pick Gallery', action: 'open_gallery' },
-        { label: isKn ? '❓ ಇದು ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ?' : '❓ How It Works', action: 'how_it_works' }
+        { label: isKn ? '📦 ಹೊಸ ಆರ್ಡರ್‌ಗಳು' : '📦 Check Orders', action: 'check_orders' },
+        { label: isKn ? '💬 ಗ್ರಾಹಕರ ವಿಚಾರಣೆಗಳು' : '💬 Enquiries', action: 'check_enquiries' },
+        { label: isKn ? '❓ ಸಹಾಯ' : '❓ How It Works', action: 'how_it_works' }
       ]
     };
 
@@ -120,6 +122,229 @@ function WhatsAppPlaceholderPage() {
     return newMsg;
   };
 
+  // Check recent artisan orders in WhatsApp chat
+  const handleCheckOrders = async () => {
+    if (!artisan?.id) {
+      addMessage('assistant', isKn ? "⚠️ ಆರ್ಡರ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಲು ಲಾಗಿನ್ ಅಗತ್ಯವಿದೆ." : "⚠️ Please sign in to check your orders.");
+      return;
+    }
+    try {
+      addMessage('artisan', isKn ? "📦 ನನ್ನ ಇತ್ತೀಚಿನ ಆರ್ಡರ್‌ಗಳನ್ನು ತೋರಿಸಿ." : "📦 Show my recent orders.");
+      const { data: rawItems, error: itemsErr } = await supabase
+        .from('order_items')
+        .select('id, order_id, product_id, artisan_id, quantity, unit_price, subtotal')
+        .eq('artisan_id', artisan.id);
+
+      if (itemsErr) throw itemsErr;
+
+      if (!rawItems || rawItems.length === 0) {
+        addMessage('assistant', isKn
+          ? "📦 **ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇನ್ನೂ ಯಾವುದೇ ಆರ್ಡರ್‌ಗಳು ಬಂದಿಲ್ಲ.**\n\nಗ್ರಾಹಕರು ನಿಮ್ಮ ಕರಕುಶಲ ವಸ್ತುಗಳನ್ನು ಖರೀದಿಸಿದಾಗ, ತಕ್ಷಣವೇ ಇಲ್ಲಿ ಆರ್ಡರ್ ಕಾರ್ಡ್ ಕಾಣಿಸುತ್ತದೆ!"
+          : "📦 **No orders found for your artisan account yet.**\n\nWhen customers purchase your handcrafted creations, you will receive an interactive order card here!",
+          {
+            actionButtons: [
+              { label: isKn ? '📷 ಹೊಸ ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '📷 List New Product', action: 'open_camera' },
+              { label: isKn ? '💬 ಗ್ರಾಹಕರ ವಿಚಾರಣೆಗಳು' : '💬 Enquiries', action: 'check_enquiries' }
+            ]
+          }
+        );
+        return;
+      }
+
+      const orderIds = [...new Set(rawItems.map(i => i.order_id))];
+      const prodIds = [...new Set(rawItems.map(i => i.product_id))];
+
+      const [ordersRes, prodsRes] = await Promise.all([
+        supabase.from('orders').select('id, customer_id, status, created_at, shipping_name, shipping_city, shipping_state').in('id', orderIds),
+        supabase.from('products').select('id, name').in('id', prodIds)
+      ]);
+
+      const oMap = new Map((ordersRes.data || []).map(o => [o.id, o]));
+      const pMap = new Map((prodsRes.data || []).map(p => [p.id, p]));
+
+      const recentOrders = [];
+      const seenOrders = new Set();
+      for (const item of rawItems) {
+        if (seenOrders.has(item.order_id)) continue;
+        seenOrders.add(item.order_id);
+        const ord = oMap.get(item.order_id);
+        if (!ord) continue;
+        const prod = pMap.get(item.product_id);
+        recentOrders.push({
+          id: ord.id,
+          customer_id: ord.customer_id,
+          status: ord.status,
+          created_at: ord.created_at,
+          product_name: prod?.name || 'Handicraft Item',
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_amount: item.subtotal || (item.quantity * item.unit_price),
+          shipping_location: [ord.shipping_city, ord.shipping_state].filter(Boolean).join(', ') || ord.shipping_name || 'Karnataka, India'
+        });
+      }
+
+      recentOrders.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const displayOrders = recentOrders.slice(0, 3);
+
+      addMessage('assistant', isKn
+        ? `📦 **ನಿಮ್ಮ ಇತ್ತೀಚಿನ ${displayOrders.length} ಆರ್ಡರ್ ವಿವರಗಳು:**`
+        : `📦 **Here are your ${displayOrders.length} latest orders:**`
+      );
+
+      for (const ord of displayOrders) {
+        addMessage('assistant', '', { orderCard: ord });
+      }
+    } catch (err) {
+      console.error('Error fetching orders in WhatsApp assistant:', err);
+      addMessage('assistant', isKn ? "⚠️ ಆರ್ಡರ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to load orders.");
+    }
+  };
+
+  // WhatsApp Order Action (Accept / Reject)
+  const handleWhatsAppOrderAction = async (orderId, newStatus) => {
+    try {
+      setProcessing(true);
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      setMessages(prev => prev.map(m => {
+        if (m.orderCard && m.orderCard.id === orderId) {
+          return {
+            ...m,
+            orderCard: { ...m.orderCard, status: newStatus }
+          };
+        }
+        return m;
+      }));
+
+      const replyNotice = newStatus === 'confirmed'
+        ? isKn
+          ? `✅ **ಆರ್ಡರ್ #${orderId.slice(0, 8).toUpperCase()} ಸ್ವೀಕರಿಸಲಾಗಿದೆ!**\n\nಗ್ರಾಹಕರಿಗೆ ದೃಢೀಕರಣ ಸಂದೇಶ ಕಳುಹಿಸಲಾಗಿದೆ. ನೀವು ಕರಕುಶಲ ವಸ್ತುವನ್ನು ಸಿದ್ಧಪಡಿಸಲು ಪ್ರಾರಂಭಿಸಬಹುದು.`
+          : `✅ **Order #${orderId.slice(0, 8).toUpperCase()} Accepted & Confirmed!**\n\nThe customer has been notified. You can start preparing the handcrafted creation.`
+        : isKn
+          ? `❌ **ಆರ್ಡರ್ #${orderId.slice(0, 8).toUpperCase()} ನಿರಾಕರಿಸಲಾಗಿದೆ ಮತ್ತು ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ.**`
+          : `❌ **Order #${orderId.slice(0, 8).toUpperCase()} Rejected and Cancelled.**`;
+
+      addMessage('assistant', replyNotice, {
+        actionButtons: [
+          { label: isKn ? '📦 ಆರ್ಡರ್‌ಗಳು' : '📦 My Orders', action: 'check_orders' },
+          { label: isKn ? '📷 ಹೊಸ ಉತ್ಪನ್ನ' : '📷 Add Product', action: 'open_camera' }
+        ]
+      });
+    } catch (err) {
+      console.error('Error updating order via WhatsApp card:', err);
+      addMessage('assistant', isKn ? "⚠️ ಆರ್ಡರ್ ಸ್ಥಿತಿ ನವೀಕರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to update order status.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Check customer custom enquiries
+  const handleCheckEnquiries = async () => {
+    if (!artisan?.id) {
+      addMessage('assistant', isKn ? "⚠️ ವಿಚಾರಣೆಗಳನ್ನು ನೋಡಲು ಲಾಗಿನ್ ಅಗತ್ಯವಿದೆ." : "⚠️ Please sign in to check enquiries.");
+      return;
+    }
+    try {
+      addMessage('artisan', isKn ? "💬 ಗ್ರಾಹಕರ ಕಸ್ಟಮ್ ವಿಚಾರಣೆಗಳನ್ನು ತೋರಿಸಿ." : "💬 Show customer custom enquiries.");
+      const { data: enqData, error: enqErr } = await supabase
+        .from('enquiries')
+        .select('id, product_id, customer_id, message, status, quantity, preferred_delivery_date, budget, reference_image_url, artisan_response, created_at')
+        .eq('artisan_id', artisan.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (enqErr) throw enqErr;
+
+      if (!enqData || enqData.length === 0) {
+        addMessage('assistant', isKn
+          ? "💬 **ಯಾವುದೇ ಹೊಸ ಗ್ರಾಹಕರ ಕಸ್ಟಮ್ ವಿಚಾರಣೆಗಳಿಲ್ಲ.**\n\nಗ್ರಾಹಕರು ನಿಮ್ಮ ಉತ್ಪನ್ನದ ಪುಟದಲ್ಲಿ ಕಸ್ಟಮ್ ಡಿಸೈನ್ ಅಥವಾ ದೊಡ್ಡ ಆರ್ಡರ್ ವಿಚಾರಿಸಿದಾಗ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ."
+          : "💬 **No pending customer enquiries found.**\n\nWhen buyers submit custom craft requests or bulk queries on your product pages, they will appear here.",
+          {
+            actionButtons: [
+              { label: isKn ? '📷 ಹೊಸ ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '📷 New Product', action: 'open_camera' },
+              { label: isKn ? '📦 ಆರ್ಡರ್‌ಗಳು' : '📦 Check Orders', action: 'check_orders' }
+            ]
+          }
+        );
+        return;
+      }
+
+      const pIds = [...new Set(enqData.map(e => e.product_id).filter(Boolean))];
+      let pNameMap = new Map();
+      if (pIds.length > 0) {
+        const { data: prods } = await supabase.from('products').select('id, name').in('id', pIds);
+        if (prods) pNameMap = new Map(prods.map(p => [p.id, p.name]));
+      }
+
+      addMessage('assistant', isKn
+        ? `💬 **ಇತ್ತೀಚಿನ ${enqData.length} ಗ್ರಾಹಕರ ವಿಚಾರಣೆಗಳು:**`
+        : `💬 **Here are your ${enqData.length} latest customer enquiries:**`
+      );
+
+      for (const enq of enqData) {
+        addMessage('assistant', '', {
+          enquiryCard: {
+            ...enq,
+            product_name: pNameMap.get(enq.product_id) || (isKn ? 'ಕರಕುಶಲ ಉತ್ಪನ್ನ' : 'Handicraft Item')
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching enquiries in WhatsApp assistant:', err);
+      addMessage('assistant', isKn ? "⚠️ ವಿಚಾರಣೆಗಳನ್ನು ಪಡೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to load enquiries.");
+    }
+  };
+
+  // Reply to customer enquiry directly
+  const handleReplyToEnquiry = async (enquiryId) => {
+    const defaultSuggestion = isKn
+      ? "ನಮಸ್ಕಾರ, ನಿಮ್ಮ ವಿಚಾರಣೆಗೆ ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಅಗತ್ಯಕ್ಕೆ ತಕ್ಕಂತೆ ನಾವು ಇದನ್ನು ಪ್ರೀತಿಯಿಂದ ತಯಾರಿಸಲು ಸಿದ್ಧರಿದ್ದೇವೆ."
+      : "Hello, thank you for your enquiry. We would be pleased to handcraft this to your exact specifications.";
+    const userReply = window.prompt(
+      isKn ? "ಗ್ರಾಹಕರಿಗೆ ನಿಮ್ಮ ಉತ್ತರವನ್ನು ಬರೆಯಿರಿ:" : "Type your response to the customer:",
+      defaultSuggestion
+    );
+    if (!userReply || !userReply.trim()) return;
+
+    try {
+      setProcessing(true);
+      const { error } = await supabase
+        .from('enquiries')
+        .update({
+          artisan_response: userReply.trim(),
+          status: 'responded'
+        })
+        .eq('id', enquiryId);
+
+      if (error) throw error;
+
+      setMessages(prev => prev.map(m => {
+        if (m.enquiryCard && m.enquiryCard.id === enquiryId) {
+          return {
+            ...m,
+            enquiryCard: { ...m.enquiryCard, artisan_response: userReply.trim(), status: 'responded' }
+          };
+        }
+        return m;
+      }));
+
+      addMessage('assistant', isKn
+        ? `✅ **ಗ್ರಾಹಕರಿಗೆ ಪ್ರತ್ಯುತ್ತರ ಕಳುಹಿಸಲಾಗಿದೆ:**\n\n"${userReply.trim()}"`
+        : `✅ **Response sent to customer successfully:**\n\n"${userReply.trim()}"`
+      );
+    } catch (err) {
+      console.error('Error replying to enquiry:', err);
+      addMessage('assistant', isKn ? "⚠️ ಪ್ರತ್ಯುತ್ತರ ಕಳುಹಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to send response.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   // Handle Action Buttons
   const handleAction = (action) => {
     switch (action) {
@@ -128,6 +353,12 @@ function WhatsAppPlaceholderPage() {
         break;
       case 'open_gallery':
         galleryInputRef.current?.click();
+        break;
+      case 'check_orders':
+        handleCheckOrders();
+        break;
+      case 'check_enquiries':
+        handleCheckEnquiries();
         break;
       case 'how_it_works':
         addMessage('assistant', isKn
@@ -559,20 +790,28 @@ function WhatsAppPlaceholderPage() {
       }
     }
 
-    // Default conversational responses
-    if (text.toLowerCase() === 'publish' || text === 'ಪ್ರಕಟಿಸು') {
+    // Conversational commands routing
+    const lower = text.toLowerCase().trim();
+    if (lower === 'publish' || lower === 'ಪ್ರಕಟಿಸು') {
       handleSaveProduct('published');
-    } else if (text.toLowerCase() === 'cancel' || text === 'ರದ್ದು') {
+    } else if (lower === 'cancel' || lower === 'ರದ್ದು') {
       handleCancelFlow();
+    } else if (lower.includes('order') || lower.includes('ಆರ್ಡರ್')) {
+      handleCheckOrders();
+    } else if (lower.includes('enquir') || lower.includes('ವಿಚಾರಣೆ') || lower.includes('question')) {
+      handleCheckEnquiries();
+    } else if (lower.includes('photo') || lower.includes('ಫೋಟೋ') || lower.includes('ಚಿತ್ರ')) {
+      handleAction('open_camera');
     } else {
       setTimeout(() => {
         addMessage('assistant', isKn
-          ? `ಸ್ವೀಕರಿಸಲಾಗಿದೆ: "${text}". ಉತ್ಪನ್ನ ರಚಿಸಲು 📷 ಕ್ಯಾಮೆರಾ ಬಳಸಿ ಫೋಟೋ ತೆಗೆಯಿರಿ ಅಥವಾ 🎙️ ಮೈಕ್ ಒತ್ತಿ ವಿವರಣೆ ನೀಡಿ.`
-          : `Received: "${text}". To list a craft item, tap 📷 to take a photo or 🎙️ to speak your description.`,
+          ? `ಸ್ವೀಕರಿಸಲಾಗಿದೆ: "${text}". ನೀವು ಉತ್ಪನ್ನ ರಚಿಸಲು ಫೋಟೋ ಕಳುಹಿಸಬಹುದು, ಅಥವಾ ನಿಮ್ಮ ಆರ್ಡರ್‌ಗಳು ಹಾಗೂ ವಿಚಾರಣೆಗಳನ್ನು ಪರಿಶೀಲಿಸಬಹುದು.`
+          : `Received: "${text}". You can send a photo to list a product, or check your orders and customer enquiries below.`,
           {
             actionButtons: [
               { label: isKn ? '📷 ಫೋಟೋ ತೆಗೆಯಿರಿ' : '📷 Take Photo', action: 'open_camera' },
-              { label: isKn ? '🖼️ ಗ್ಯಾಲರಿ' : '🖼️ Gallery', action: 'open_gallery' }
+              { label: isKn ? '📦 ಹೊಸ ಆರ್ಡರ್‌ಗಳು' : '📦 Orders', action: 'check_orders' },
+              { label: isKn ? '💬 ವಿಚಾರಣೆಗಳು' : '💬 Enquiries', action: 'check_enquiries' }
             ]
           }
         );
@@ -796,6 +1035,86 @@ function WhatsAppPlaceholderPage() {
           </div>
         )}
 
+        {/* Quick Action Shortcut Pills */}
+        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap', margin: '0.35rem 0 0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => handleAction('open_camera')}
+            style={{
+              padding: '0.25rem 0.6rem',
+              borderRadius: '16px',
+              border: '1px solid var(--border, #d1d7db)',
+              background: 'var(--card-bg, #ffffff)',
+              color: 'var(--text)',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            📷 {isKn ? 'ಫೋಟೋ' : 'Photo'}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction('open_gallery')}
+            style={{
+              padding: '0.25rem 0.6rem',
+              borderRadius: '16px',
+              border: '1px solid var(--border, #d1d7db)',
+              background: 'var(--card-bg, #ffffff)',
+              color: 'var(--text)',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            🖼️ {isKn ? 'ಗ್ಯಾಲರಿ' : 'Gallery'}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction('check_orders')}
+            style={{
+              padding: '0.25rem 0.6rem',
+              borderRadius: '16px',
+              border: '1px solid var(--border, #d1d7db)',
+              background: 'var(--card-bg, #ffffff)',
+              color: 'var(--primary-green)',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            📦 {isKn ? 'ಆರ್ಡರ್‌ಗಳು' : 'Orders'}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction('check_enquiries')}
+            style={{
+              padding: '0.25rem 0.6rem',
+              borderRadius: '16px',
+              border: '1px solid var(--border, #d1d7db)',
+              background: 'var(--card-bg, #ffffff)',
+              color: '#2563EB',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            💬 {isKn ? 'ವಿಚಾರಣೆಗಳು' : 'Enquiries'}
+          </button>
+        </div>
+
         {/* Messages List */}
         {messages.map((msg) => {
           const isUser = msg.sender === 'artisan';
@@ -906,6 +1225,158 @@ function WhatsAppPlaceholderPage() {
                     <div style={{ fontSize: '0.75rem', color: 'var(--secondary-text)', marginTop: '0.35rem', borderTop: '1px dashed var(--border)', paddingTop: '0.3rem' }}>
                       💡 {isKn ? 'ಬೆಲೆ ತಿದ್ದಲು ಧ್ವನಿಯಲ್ಲಿ ಹೇಳಿ: "ಬೆಲೆ 450 ಮಾಡಿ" ಅಥವಾ ಬಾಕ್ಸ್‌ನಲ್ಲಿ ಟೈಪ್ ಮಾಡಿ.' : 'You can voice-correct: "Change price to 450" or type in the box above.'}
                     </div>
+                  </div>
+                )}
+
+                {/* Interactive Order Card */}
+                {msg.orderCard && (
+                  <div style={{
+                    marginTop: '0.65rem',
+                    padding: '0.75rem',
+                    background: 'var(--chat-bg, #f8f5ee)',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--primary-green, #075e54)',
+                    fontSize: '0.82rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.35rem' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--primary-green)' }}>
+                        📦 {isKn ? 'ಆರ್ಡರ್ ವಿವರ' : 'Order'} #{msg.orderCard.id?.slice(0, 8).toUpperCase()}
+                      </span>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '4px',
+                        background: msg.orderCard.status === 'confirmed' ? '#dcfce7' : msg.orderCard.status === 'cancelled' ? '#fee2e2' : '#fef3c7',
+                        color: msg.orderCard.status === 'confirmed' ? '#166534' : msg.orderCard.status === 'cancelled' ? '#991b1b' : '#92400e'
+                      }}>
+                        {msg.orderCard.status.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div style={{ marginBottom: '0.4rem' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.86rem' }}>
+                        {msg.orderCard.product_name}
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--secondary-text)', marginTop: '0.15rem' }}>
+                        {isKn ? 'ಪ್ರಮಾಣ:' : 'Qty:'} <strong>{msg.orderCard.quantity}</strong> • {isKn ? 'ಮೊತ್ತ:' : 'Total:'} <strong style={{ color: 'var(--primary-green)' }}>₹{Number(msg.orderCard.total_amount).toFixed(2)}</strong>
+                      </div>
+                      {msg.orderCard.shipping_location && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--secondary-text)', marginTop: '0.25rem' }}>
+                          📍 {isKn ? 'ತಲುಪಿಸಬೇಕಾದ ವಿಳಾಸ:' : 'Ship to:'} {msg.orderCard.shipping_location}
+                        </div>
+                      )}
+                    </div>
+
+                    {msg.orderCard.status === 'placed' && (
+                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--border)' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleWhatsAppOrderAction(msg.orderCard.id, 'confirmed')}
+                          disabled={processing}
+                          style={{
+                            flex: 1,
+                            padding: '0.45rem 0.6rem',
+                            background: 'var(--primary-green)',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isKn ? 'ಸ್ವೀಕರಿಸಿ ✅' : 'Accept Order ✅'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleWhatsAppOrderAction(msg.orderCard.id, 'cancelled')}
+                          disabled={processing}
+                          style={{
+                            flex: 1,
+                            padding: '0.45rem 0.6rem',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            border: '1px solid #ef4444',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isKn ? 'ನಿರಾಕರಿಸಿ ❌' : 'Reject ❌'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Interactive Customer Enquiry Card */}
+                {msg.enquiryCard && (
+                  <div style={{
+                    marginTop: '0.65rem',
+                    padding: '0.75rem',
+                    background: 'var(--chat-bg, #f8f5ee)',
+                    borderRadius: '8px',
+                    border: '1.5px solid #2563EB',
+                    fontSize: '0.82rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.35rem' }}>
+                      <span style={{ fontWeight: 700, color: '#2563EB' }}>
+                        💬 {isKn ? 'ಗ್ರಾಹಕರ ಕಸ್ಟಮ್ ವಿಚಾರಣೆ' : 'Customer Enquiry'}
+                      </span>
+                      <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>
+                        {msg.enquiryCard.status}
+                      </span>
+                    </div>
+
+                    <div style={{ marginBottom: '0.35rem' }}>
+                      <strong style={{ color: 'var(--text)', fontSize: '0.86rem' }}>{msg.enquiryCard.product_name}</strong>
+                    </div>
+
+                    <p style={{ margin: '0.2rem 0 0.4rem', fontStyle: 'italic', color: 'var(--text)', background: 'var(--card-bg, #ffffff)', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                      "{msg.enquiryCard.message}"
+                    </p>
+
+                    {msg.enquiryCard.reference_image_url && (
+                      <div style={{ marginBottom: '0.4rem' }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--secondary-text)', display: 'block' }}>
+                          📷 {isKn ? 'ಗ್ರಾಹಕರು ಲಗತ್ತಿಸಿದ ಫೋಟೋ:' : 'Customer attachment:'}
+                        </span>
+                        <img src={msg.enquiryCard.reference_image_url} alt="Customer reference" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: '0.72rem', color: 'var(--secondary-text)' }}>
+                      {msg.enquiryCard.quantity && <span>{isKn ? 'ಪ್ರಮಾಣ:' : 'Qty:'} <strong>{msg.enquiryCard.quantity}</strong> • </span>}
+                      {msg.enquiryCard.budget && <span>{isKn ? 'ಬಜೆಟ್:' : 'Budget:'} <strong style={{ color: '#059669' }}>₹{msg.enquiryCard.budget}</strong> • </span>}
+                      {msg.enquiryCard.preferred_delivery_date && <span>📅 {msg.enquiryCard.preferred_delivery_date}</span>}
+                    </div>
+
+                    {msg.enquiryCard.artisan_response ? (
+                      <div style={{ marginTop: '0.4rem', padding: '0.4rem 0.6rem', background: '#ecfdf5', borderRadius: '6px', color: '#065f46', fontSize: '0.76rem', border: '1px solid #a7f3d0' }}>
+                        ✓ <strong>{isKn ? 'ನಿಮ್ಮ ಪ್ರತ್ಯುತ್ತರ:' : 'Your Reply:'}</strong> {msg.enquiryCard.artisan_response}
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleReplyToEnquiry(msg.enquiryCard.id)}
+                          style={{
+                            padding: '0.35rem 0.65rem',
+                            background: '#2563EB',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✍️ {isKn ? 'ಗ್ರಾಹಕರಿಗೆ ಉತ್ತರಿಸಿ' : 'Reply to Customer'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

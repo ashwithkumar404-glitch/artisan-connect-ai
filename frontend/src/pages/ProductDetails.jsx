@@ -85,15 +85,13 @@ export default function ProductDetails() {
 
     if (!user) {
       setIsLoginModalOpen(true);
-    } else if (profile?.role === 'buyer') {
-      if (!product?.artisan_id) {
-        setEnquiryError('Unable to contact the artisan because this product is missing its artisan information.');
-        return;
-      }
-      setIsEnquiryModalOpen(true);
-    } else {
-      setEnquiryError('Please login as a customer to send enquiries.');
+      return;
     }
+    if (!product?.artisan_id) {
+      setEnquiryError('Unable to contact the artisan because this product is missing its artisan information.');
+      return;
+    }
+    setIsEnquiryModalOpen(true);
   };
 
   const handleEnquirySubmit = async (e) => {
@@ -107,7 +105,7 @@ export default function ProductDetails() {
       setIsSendingEnquiry(true);
       setEnquiryError('');
 
-      if (!user || profile?.role !== 'buyer') {
+      if (!user) {
         throw new Error('Please login as a customer to send enquiries.');
       }
 
@@ -118,21 +116,28 @@ export default function ProductDetails() {
       let referenceImageUrl = null;
       if (enquiryRefImage) {
         setEnquiryUploading(true);
-        const fileExt = enquiryRefImage.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `enquiries/${user.id}/${fileName}`;
+        try {
+          const fileExt = enquiryRefImage.name.split('.').pop() || 'jpg';
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `enquiries/${user.id}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('review-photos')
-          .upload(filePath, enquiryRefImage);
+          const { error: uploadError } = await supabase.storage
+            .from('review-photos')
+            .upload(filePath, enquiryRefImage);
 
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from('review-photos')
-          .getPublicUrl(filePath);
-
-        referenceImageUrl = publicUrlData?.publicUrl;
+          if (uploadError) {
+            console.warn('Storage upload error for enquiry image:', uploadError);
+          } else {
+            const { data: publicUrlData } = supabase.storage
+              .from('review-photos')
+              .getPublicUrl(filePath);
+            referenceImageUrl = publicUrlData?.publicUrl || null;
+          }
+        } catch (uploadErr) {
+          console.warn('Optional reference image upload failed:', uploadErr);
+        } finally {
+          setEnquiryUploading(false);
+        }
       }
 
       const { error: insertError } = await supabase
@@ -149,7 +154,12 @@ export default function ProductDetails() {
           status: 'submitted'
         });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        if (insertError.message && insertError.message.includes('row-level security')) {
+          throw new Error('Unable to send enquiry due to security policy. Please ensure you are logged in to your customer account.');
+        }
+        throw insertError;
+      }
 
       // Notify admins
       const { data: admins } = await supabase

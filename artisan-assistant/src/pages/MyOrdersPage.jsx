@@ -114,7 +114,7 @@ function MyOrdersPage() {
           .in('id', orderIds),
         supabase
           .from('products')
-          .select('id, name, local_title')
+          .select('id, name')
           .in('id', productIds),
         supabase
           .from('product_images')
@@ -198,10 +198,18 @@ function MyOrdersPage() {
       // Optional: dispatch customer notification (non-fatal if blocked)
       if (customerId) {
         try {
+          const statusTitle =
+            newStatus === 'confirmed'
+              ? 'Order Accepted & Confirmed'
+              : newStatus === 'cancelled'
+              ? 'Order Cancelled'
+              : newStatus === 'preparing'
+              ? 'Order Under Preparation'
+              : 'Order Shipped';
           await supabase.from('notifications').insert({
             user_id: customerId,
             type: 'order_status_changed',
-            title: newStatus === 'preparing' ? 'Order Under Preparation' : 'Order Shipped',
+            title: statusTitle,
             message: `Your order #${orderId.slice(0, 8).toUpperCase()} containing "${firstItemName || 'your craft'}" has been updated to ${newStatus.toUpperCase()} by the artisan.`,
             reference_id: orderId,
             reference_type: 'order',
@@ -218,7 +226,15 @@ function MyOrdersPage() {
       );
 
       const successText =
-        newStatus === 'preparing'
+        newStatus === 'confirmed'
+          ? isKn
+            ? 'ಆರ್ಡರ್ ಯಶಸ್ವಿಯಾಗಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ!'
+            : 'Order accepted and confirmed!'
+          : newStatus === 'cancelled'
+          ? isKn
+            ? 'ಆರ್ಡರ್ ನಿರಾಕರಿಸಲಾಗಿದೆ.'
+            : 'Order has been rejected and cancelled.'
+          : newStatus === 'preparing'
           ? isKn
             ? 'ಆರ್ಡರ್ ಸಿದ್ಧಪಡಿಸುವಿಕೆ ಪ್ರಾರಂಭವಾಗಿದೆ!'
             : 'Order marked as preparing!'
@@ -231,6 +247,15 @@ function MyOrdersPage() {
       setErrorMsg(err.message || (isKn ? 'ಸ್ಥಿತಿ ನವೀಕರಣ ವಿಫಲವಾಗಿದೆ.' : 'Failed to update order status.'));
     } finally {
       setStatusActionId(null);
+    }
+  };
+
+  const handleRejectOrder = (orderId, customerId, firstItemName) => {
+    const confirmMsg = isKn
+      ? 'ಈ ಆರ್ಡರ್ ಅನ್ನು ನಿರಾಕರಿಸಲು ಮತ್ತು ರದ್ದುಗೊಳಿಸಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?'
+      : 'Are you sure you want to reject and cancel this order?';
+    if (window.confirm(confirmMsg)) {
+      handleUpdateStatus(orderId, 'cancelled', customerId, firstItemName);
     }
   };
 
@@ -807,16 +832,46 @@ function MyOrdersPage() {
                     )}
 
                     {ord.status === 'placed' && (
-                      <span
-                        style={{
-                          fontSize: '0.74rem',
-                          color: 'var(--secondary-text)',
-                          fontStyle: 'italic',
-                          padding: '0.35rem 0'
-                        }}
-                      >
-                        {isKn ? 'ಆಡಳಿತ ಮಂಡಳಿಯ ದೃಢೀಕರಣಕ್ಕಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ' : 'Awaiting confirmation'}
-                      </span>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStatus(ord.id, 'confirmed', ord.customer_id, firstItemName)}
+                          disabled={isUpdating}
+                          style={{
+                            padding: '0.45rem 0.8rem',
+                            background: 'var(--primary-green)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            cursor: isUpdating ? 'not-allowed' : 'pointer',
+                            minHeight: '38px',
+                            touchAction: 'manipulation'
+                          }}
+                        >
+                          {isUpdating ? '...' : isKn ? 'ಆರ್ಡರ್ ಸ್ವೀಕರಿಸಿ ✅' : 'Accept Order ✅'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectOrder(ord.id, ord.customer_id, firstItemName)}
+                          disabled={isUpdating}
+                          style={{
+                            padding: '0.45rem 0.65rem',
+                            background: 'var(--danger-bg, #fee2e2)',
+                            color: 'var(--danger, #dc2626)',
+                            border: '1px solid var(--danger, #dc2626)',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: isUpdating ? 'not-allowed' : 'pointer',
+                            minHeight: '38px',
+                            touchAction: 'manipulation'
+                          }}
+                        >
+                          {isUpdating ? '...' : isKn ? 'ನಿರಾಕರಿಸಿ ❌' : 'Reject ❌'}
+                        </button>
+                      </div>
                     )}
 
                     {ord.status === 'shipped' && (

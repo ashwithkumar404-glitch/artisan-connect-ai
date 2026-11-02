@@ -12,6 +12,7 @@ function ProductPerformancePage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [period, setPeriod] = useState('all'); // '7d' | '30d' | 'all'
   const [sortBy, setSortBy] = useState('revenue'); // 'revenue' | 'units' | 'stock'
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
   const [products, setProducts] = useState([]);
   const [orderItems, setOrderItems] = useState([]);
   const [ordersMap, setOrdersMap] = useState(new Map());
@@ -38,15 +39,19 @@ function ProductPerformancePage() {
       setLoading(true);
       setErrorMsg('');
 
-      // 1. Fetch artisan's products
+      // 1. Fetch artisan's products using verified schema columns: stock_quantity, status
       const { data: prodsData, error: prodsErr } = await supabase
         .from('products')
-        .select('id, name, price, stock, is_active, created_at, category_id')
+        .select('id, name, price, stock_quantity, status, created_at, category_id')
         .eq('artisan_id', artisan.id);
 
       if (prodsErr) throw prodsErr;
 
-      const prodList = prodsData || [];
+      const prodList = (prodsData || []).map((p) => ({
+        ...p,
+        stock: p.stock_quantity ?? 0,
+        is_active: p.status === 'published'
+      }));
       setProducts(prodList);
       const prodIds = prodList.map((p) => p.id);
 
@@ -140,6 +145,7 @@ function ProductPerformancePage() {
         product: p,
         unitsSold: 0,
         revenue: 0,
+        completedRevenue: 0,
         orderCount: 0,
         cancelledUnits: 0
       });
@@ -152,9 +158,10 @@ function ProductPerformancePage() {
       const qty = Number(item.quantity || 0);
 
       const pEntry = prodMap.get(item.product_id) || {
-        product: { id: item.product_id, name: 'Craft Product', price: item.unit_price, stock: 0 },
+        product: { id: item.product_id, name: 'Craft Product', price: item.unit_price, stock: 0, stock_quantity: 0, status: 'published' },
         unitsSold: 0,
         revenue: 0,
+        completedRevenue: 0,
         orderCount: 0,
         cancelledUnits: 0
       };
@@ -165,6 +172,7 @@ function ProductPerformancePage() {
         distinctOrders.add(item.order_id);
         deliveredOrdersCount++;
         pEntry.unitsSold += qty;
+        pEntry.completedRevenue += subtotal;
         pEntry.revenue += subtotal;
         pEntry.orderCount += 1;
       } else if (status === 'cancelled') {
@@ -548,30 +556,70 @@ function ProductPerformancePage() {
 
       {/* Top Products Breakdown Section */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <h2 style={{ fontSize: '0.98rem', margin: 0, fontWeight: 700, color: 'var(--primary-green)' }}>
             {isKn ? 'ಉತ್ಪನ್ನಗಳ ವಿವರ ಮತ್ತು ಶ್ರೇಯಾಂಕ' : 'Product Sales Ranking'} ({productStats.length})
           </h2>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--secondary-text)' }}>{isKn ? 'ವಿಂಗಡಿಸಿ:' : 'Sort:'}</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={{
-                background: 'var(--card-bg)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                padding: '0.25rem 0.5rem',
-                fontSize: '0.75rem',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="revenue">{isKn ? 'ಆದಾಯ' : 'Revenue'}</option>
-              <option value="units">{isKn ? 'ಮಾರಾಟವಾದ ಪ್ರಮಾಣ' : 'Units Sold'}</option>
-              <option value="stock">{isKn ? 'ದಾಸ್ತಾನು' : 'Stock Level'}</option>
-            </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {/* View mode toggle (Table / Cards) */}
+            <div style={{ display: 'flex', background: 'var(--chat-bg)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border)' }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                title="Table view"
+                style={{
+                  background: viewMode === 'table' ? 'var(--primary-green)' : 'transparent',
+                  color: viewMode === 'table' ? '#FFFFFF' : 'var(--secondary-text)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                📊 {isKn ? 'ಕೋಷ್ಟಕ' : 'Table'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                title="Card view"
+                style={{
+                  background: viewMode === 'cards' ? 'var(--primary-green)' : 'transparent',
+                  color: viewMode === 'cards' ? '#FFFFFF' : 'var(--secondary-text)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                🗂️ {isKn ? 'ಕಾರ್ಡ್' : 'Cards'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--secondary-text)' }}>{isKn ? 'ವಿಂಗಡಿಸಿ:' : 'Sort:'}</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  background: 'var(--card-bg)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  padding: '0.2rem 0.4rem',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="revenue">{isKn ? 'ಆದಾಯ' : 'Revenue'}</option>
+                <option value="units">{isKn ? 'ಮಾರಾಟವಾದ ಪ್ರಮಾಣ' : 'Units Sold'}</option>
+                <option value="stock">{isKn ? 'ದಾಸ್ತಾನು' : 'Stock Level'}</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -614,6 +662,93 @@ function ProductPerformancePage() {
             >
               {isKn ? '➕ ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : '➕ Add Product'}
             </Link>
+          </div>
+        ) : viewMode === 'table' ? (
+          /* Performance Table: | Product | Orders | Units Sold | Completed Revenue | Stock | Status | */
+          <div style={{ overflowX: 'auto', background: 'var(--card-bg)', borderRadius: '10px', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', minWidth: '460px' }}>
+              <thead>
+                <tr style={{ background: 'var(--chat-bg)', borderBottom: '1px solid var(--border)', color: 'var(--secondary-text)' }}>
+                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontWeight: 700 }}>{isKn ? 'ಉತ್ಪನ್ನ (Product)' : 'Product'}</th>
+                  <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>{isKn ? 'ಆರ್ಡರ್ (Orders)' : 'Orders'}</th>
+                  <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>{isKn ? 'ಮಾರಾಟ (Units)' : 'Units Sold'}</th>
+                  <th style={{ padding: '0.65rem 0.6rem', textAlign: 'right', fontWeight: 700 }}>{isKn ? 'ಪೂರ್ಣ ಆದಾಯ' : 'Completed Rev'}</th>
+                  <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>{isKn ? 'ದಾಸ್ತಾನು (Stock)' : 'Stock'}</th>
+                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700 }}>{isKn ? 'ಸ್ಥಿತಿ (Status)' : 'Status'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productStats.map((stat, idx) => {
+                  const p = stat.product;
+                  const imgUrl = imagesMap.get(p.id);
+                  const stock = Number(p.stock_quantity ?? p.stock ?? 0);
+                  const status = p.status || 'published';
+
+                  let stockBadge = {
+                    text: `${stock}`,
+                    bg: 'rgba(16, 185, 129, 0.12)',
+                    color: '#059669'
+                  };
+                  if (stock <= 0) {
+                    stockBadge = { text: isKn ? 'ಖಾಲಿ' : '0 (Out)', bg: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' };
+                  } else if (stock <= 3) {
+                    stockBadge = { text: `${stock} (${isKn ? 'ಕಡಿಮೆ' : 'Low'})`, bg: 'rgba(245, 158, 11, 0.15)', color: '#D97706' };
+                  }
+
+                  let statusBadge = {
+                    text: isKn ? 'ಪ್ರಕಟವಾಗಿದೆ' : 'Published',
+                    bg: 'rgba(16, 185, 129, 0.12)',
+                    color: '#059669'
+                  };
+                  if (status === 'draft') {
+                    statusBadge = { text: isKn ? 'ಕರಡು' : 'Draft', bg: 'rgba(100, 116, 139, 0.12)', color: '#64748B' };
+                  } else if (status === 'pending_review') {
+                    statusBadge = { text: isKn ? 'ಪರಿಶೀಲನೆಯಲ್ಲಿ' : 'Review', bg: 'rgba(245, 158, 11, 0.15)', color: '#D97706' };
+                  } else if (status === 'out_of_stock' || stock <= 0) {
+                    statusBadge = { text: isKn ? 'ದಾಸ್ತಾನು ಮುಗಿದಿದೆ' : 'Out of Stock', bg: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' };
+                  }
+
+                  return (
+                    <tr key={p.id} style={{ borderBottom: idx < productStats.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <td style={{ padding: '0.6rem 0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {imgUrl ? (
+                            <img src={imgUrl} alt={p.name} style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '32px', height: '32px', borderRadius: '4px', background: 'var(--chat-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🏺</div>
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+                              {p.name}
+                            </div>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--secondary-text)' }}>₹{p.price}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontWeight: 600, color: 'var(--text)' }}>
+                        {stat.orderCount}
+                      </td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontWeight: 600, color: 'var(--text)' }}>
+                        {stat.unitsSold}
+                      </td>
+                      <td style={{ padding: '0.6rem 0.6rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary-green)' }}>
+                        ₹{(stat.completedRevenue || stat.revenue).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center' }}>
+                        <span style={{ padding: '0.15rem 0.4rem', borderRadius: '4px', background: stockBadge.bg, color: stockBadge.color, fontWeight: 700, fontSize: '0.7rem' }}>
+                          {stockBadge.text}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
+                        <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: statusBadge.bg, color: statusBadge.color, fontWeight: 600, fontSize: '0.68rem' }}>
+                          {statusBadge.text}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
