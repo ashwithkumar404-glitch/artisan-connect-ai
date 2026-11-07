@@ -8,7 +8,8 @@ export default function BuyerProfile() {
   const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'profile';
+  const targetEnquiryId = searchParams.get('enquiryId');
+  const activeTab = searchParams.get('tab') || (targetEnquiryId ? 'enquiries' : 'profile');
 
   // Profile fields
   const [fullName, setFullName] = useState('');
@@ -20,6 +21,10 @@ export default function BuyerProfile() {
   // Orders data
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [confirmingOrderId, setConfirmingOrderId] = useState(null);
+  const [orderActionSuccess, setOrderActionSuccess] = useState('');
+  const [orderActionError, setOrderActionError] = useState('');
+  const [deliveryHelpOrderId, setDeliveryHelpOrderId] = useState(null);
 
   // Reviews data
   const [reviews, setReviews] = useState([]);
@@ -32,9 +37,15 @@ export default function BuyerProfile() {
   const [reviewError, setReviewError] = useState('');
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
-  // Enquiries data
+  // Enquiries data and negotiation state
   const [enquiries, setEnquiries] = useState([]);
   const [loadingEnquiries, setLoadingEnquiries] = useState(true);
+  const [enquiryMessagesMap, setEnquiryMessagesMap] = useState({});
+  const [replyTextMap, setReplyTextMap] = useState({});
+  const [counterBudgetMap, setCounterBudgetMap] = useState({});
+  const [showCounterInputMap, setShowCounterInputMap] = useState({});
+  const [actionInProgressEnquiryId, setActionInProgressEnquiryId] = useState(null);
+  const [enquiryActionFeedback, setEnquiryActionFeedback] = useState({});
 
   // Initialize input fields when the profile finishes loading
   useEffect(() => {
@@ -105,6 +116,44 @@ export default function BuyerProfile() {
     }
   };
 
+  const handleConfirmReceived = async (orderId) => {
+    try {
+      setConfirmingOrderId(orderId);
+      setOrderActionError('');
+      setOrderActionSuccess('');
+
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'delivered' })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'delivered' } : o))
+      );
+      setOrderActionSuccess('Order marked as delivered! Thank you for confirming receipt. You can now leave a review.');
+
+      // Refresh reviews list so user can immediately write reviews
+      loadReviewsData();
+    } catch (err) {
+      console.error('Error confirming delivery:', err);
+      setOrderActionError(err.message || 'Failed to confirm order receipt.');
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  };
+
+  const getOrderTracking = (orderId) => {
+    try {
+      const saved = localStorage.getItem(`order_tracking_${orderId}`);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
   const loadReviewsData = async () => {
     try {
       setLoadingReviews(true);
@@ -154,36 +203,256 @@ export default function BuyerProfile() {
   const loadEnquiries = async () => {
     try {
       setLoadingEnquiries(true);
-      const { data, error } = await supabase
+      let data = null;
+
+      // Try full query with negotiation columns
+      const fullRes = await supabase
         .from('enquiries')
         .select(`
           id,
+          product_id,
+          customer_id,
+          artisan_id,
           message,
           quantity,
           preferred_delivery_date,
           budget,
           reference_image_url,
           artisan_response,
+          counteroffer_amount,
+          expected_ready_date,
+          customer_accepted_at,
+          artisan_confirmed_at,
+          production_notes,
+          order_id,
           status,
           created_at,
           products (
             id,
-            name
+            name,
+            price
           ),
           artisans (
             id,
-            business_name
+            business_name,
+            profile_id
           )
         `)
         .eq('customer_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (fullRes.error) {
+        // Fallback for schemas missing newer negotiation columns
+        console.warn('Enquiries full query fallback:', fullRes.error.message);
+        const fallbackRes = await supabase
+          .from('enquiries')
+          .select(`
+            id,
+            product_id,
+            customer_id,
+            artisan_id,
+            message,
+            quantity,
+            preferred_delivery_date,
+            budget,
+            reference_image_url,
+            artisan_response,
+            status,
+            created_at,
+            products (
+              id,
+              name,
+              price
+            ),
+            artisans (
+              id,
+              business_name,
+              profile_id
+            )
+          `)
+          .eq('customer_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (fallbackRes.error) throw fallbackRes.error;
+        data = fallbackRes.data;
+      } else {
+        data = fullRes.data;
+      }
+
       setEnquiries(data || []);
+
+      // Load conversation messages from enquiry_messages table
+      if (data && data.length > 0) {
+        const enqIds = data.map(d => d.id);
+        try {
+          const { data: msgData, error: msgErr } = await supabase
+            .from('enquiry_messages')
+            .select('*')
+            .in('enquiry_id', enqIds)
+            .order('created_at', { ascending: true });
+
+          if (!msgErr && msgData) {
+            const map = {};
+            for (const m of msgData) {
+              if (!map[m.enquiry_id]) map[m.enquiry_id] = [];
+              map[m.enquiry_id].push(m);
+            }
+            setEnquiryMessagesMap(map);
+          }
+        } catch (msgErr) {
+          console.warn('enquiry_messages load fallback:', msgErr);
+        }
+      }
     } catch (e) {
       console.error('Error loading customer enquiries:', e);
     } finally {
       setLoadingEnquiries(false);
+    }
+  };
+
+  const handleAcceptOffer = async (enq) => {
+    const agreedAmount = enq.counteroffer_amount || enq.budget;
+    const confirmAccept = window.confirm(
+      `Confirm acceptance of artisan's offer of ₹${agreedAmount}? The artisan will be notified to review workshop scheduling and confirm production.`
+    );
+    if (!confirmAccept) return;
+
+    try {
+      setActionInProgressEnquiryId(enq.id);
+      setEnquiryActionFeedback(prev => ({ ...prev, [enq.id]: '' }));
+
+      const { error } = await supabase
+        .from('enquiries')
+        .update({
+          status: 'offer_accepted',
+          customer_accepted_at: new Date().toISOString()
+        })
+        .eq('id', enq.id);
+
+      if (error) throw error;
+
+      // Persist acceptance in enquiry_messages
+      try {
+        await supabase.from('enquiry_messages').insert({
+          enquiry_id: enq.id,
+          sender_id: user.id,
+          sender_role: 'customer',
+          message: `Agreement confirmed! Customer accepted the offer of ₹${agreedAmount} (${enq.quantity || 1} units). Awaiting artisan production confirmation and scheduled delivery date.`,
+          message_type: 'acceptance',
+          proposed_amount: agreedAmount,
+          unit_price_equivalent: enq.quantity > 0 ? Number((agreedAmount / enq.quantity).toFixed(2)) : null
+        });
+      } catch (e) {
+        console.warn('enquiry_messages insert fallback:', e);
+      }
+
+      // Notify artisan
+      try {
+        const artisanProfileId = enq.artisans?.profile_id;
+        if (artisanProfileId) {
+          await supabase.from('notifications').insert({
+            user_id: artisanProfileId,
+            type: 'enquiry_offer_accepted',
+            title: 'Customer Accepted Your Offer! 🎉',
+            message: `The customer accepted your price of ₹${agreedAmount} for "${enq.products?.name}". Review and confirm production to activate the order.`,
+            reference_id: enq.id,
+            reference_type: 'enquiry',
+            is_read: false
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Notification insert fallback:', notifErr);
+      }
+
+      setEnquiryActionFeedback(prev => ({
+        ...prev,
+        [enq.id]: 'Offer accepted! The artisan has been notified to schedule and confirm production.'
+      }));
+      await loadEnquiries();
+    } catch (err) {
+      console.error('Error accepting offer:', err);
+      alert('Unable to accept offer: ' + err.message);
+    } finally {
+      setActionInProgressEnquiryId(null);
+    }
+  };
+
+  const handleSendCustomerMessage = async (enq, isCounter = false) => {
+    const text = (replyTextMap[enq.id] || '').trim();
+    const counterAmount = counterBudgetMap[enq.id] ? parseFloat(counterBudgetMap[enq.id]) : null;
+
+    if (!text && !counterAmount) return;
+
+    try {
+      setActionInProgressEnquiryId(enq.id);
+      setEnquiryActionFeedback(prev => ({ ...prev, [enq.id]: '' }));
+
+      const updates = {
+        updated_at: new Date().toISOString()
+      };
+      if (isCounter && counterAmount) {
+        updates.budget = counterAmount;
+        updates.status = 'negotiation_ongoing';
+      }
+
+      const { error: updateErr } = await supabase
+        .from('enquiries')
+        .update(updates)
+        .eq('id', enq.id);
+
+      if (updateErr) throw updateErr;
+
+      // Add to enquiry_messages
+      const msgContent = text || `Proposed new counter-budget: ₹${counterAmount}`;
+      try {
+        await supabase.from('enquiry_messages').insert({
+          enquiry_id: enq.id,
+          sender_id: user.id,
+          sender_role: 'customer',
+          message: msgContent,
+          message_type: isCounter ? 'counteroffer' : 'text',
+          proposed_amount: counterAmount,
+          unit_price_equivalent: counterAmount && enq.quantity > 0 ? Number((counterAmount / enq.quantity).toFixed(2)) : null
+        });
+      } catch (msgErr) {
+        console.warn('enquiry_messages insert fallback:', msgErr);
+      }
+
+      // Notify artisan
+      try {
+        const artisanProfileId = enq.artisans?.profile_id;
+        if (artisanProfileId) {
+          await supabase.from('notifications').insert({
+            user_id: artisanProfileId,
+            type: 'enquiry_counteroffer',
+            title: isCounter ? 'Customer Submitted Counteroffer' : 'New Message on Enquiry',
+            message: isCounter
+              ? `Customer proposed ₹${counterAmount} for "${enq.products?.name}": "${msgContent}"`
+              : `Customer sent a message on enquiry for "${enq.products?.name}": "${msgContent}"`,
+            reference_id: enq.id,
+            reference_type: 'enquiry',
+            is_read: false
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Notification insert fallback:', notifErr);
+      }
+
+      // Reset inputs
+      setReplyTextMap(prev => ({ ...prev, [enq.id]: '' }));
+      setCounterBudgetMap(prev => ({ ...prev, [enq.id]: '' }));
+      setShowCounterInputMap(prev => ({ ...prev, [enq.id]: false }));
+      setEnquiryActionFeedback(prev => ({
+        ...prev,
+        [enq.id]: isCounter ? 'Counteroffer submitted to artisan.' : 'Message sent to artisan.'
+      }));
+
+      await loadEnquiries();
+    } catch (err) {
+      console.error('Error sending message:', err);
+      alert('Failed to send message: ' + err.message);
+    } finally {
+      setActionInProgressEnquiryId(null);
     }
   };
 
@@ -451,6 +720,18 @@ export default function BuyerProfile() {
             </div>
           ) : (
             <div className="space-y-6">
+              {orderActionSuccess && (
+                <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-semibold rounded border border-emerald-100 flex items-center justify-between">
+                  <span>✓ {orderActionSuccess}</span>
+                  <button onClick={() => setOrderActionSuccess('')} className="text-emerald-700 hover:text-emerald-900 font-bold ml-2">✕</button>
+                </div>
+              )}
+              {orderActionError && (
+                <div className="p-3 bg-red-50 text-red-800 text-xs font-semibold rounded border border-red-100 flex items-center justify-between">
+                  <span>⚠️ {orderActionError}</span>
+                  <button onClick={() => setOrderActionError('')} className="text-red-700 hover:text-red-900 font-bold ml-2">✕</button>
+                </div>
+              )}
               {orders.map((order) => {
                 const stepIdx = getStepIndex(order.status);
                 const orderDate = new Date(order.created_at).toLocaleDateString('en-IN', {
@@ -507,6 +788,30 @@ export default function BuyerProfile() {
                       })}
                     </div>
 
+                    {/* Shipping Address and Courier Tracking */}
+                    <div className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-slate-700 block">📍 Shipping Address:</span>
+                        <span>{order.shipping_name}, {order.shipping_address}, {order.shipping_city}, {order.shipping_state} - {order.shipping_pincode}</span>
+                        {order.shipping_phone && <span className="block text-[11px] text-slate-500">Contact: {order.shipping_phone}</span>}
+                      </div>
+                      {(() => {
+                        const tracking = getOrderTracking(order.id);
+                        if (tracking) {
+                          return (
+                            <div className="bg-white border border-blue-200 text-blue-900 rounded p-2 text-[11px] sm:text-right shrink-0 shadow-xs">
+                              <div className="font-bold">🚚 Courier: {tracking.carrier}</div>
+                              <div className="font-mono text-slate-700">Ref: {tracking.trackingNumber}</div>
+                              {tracking.dispatchedAt && (
+                                <div className="text-[10px] text-slate-500">Dispatched: {new Date(tracking.dispatchedAt).toLocaleDateString()}</div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+
                     {/* Tracking Timeline Stepper */}
                     {order.status !== 'cancelled' ? (
                       <div className="pt-4 border-t border-slate-100">
@@ -539,6 +844,74 @@ export default function BuyerProfile() {
                       <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded text-xs flex items-center gap-2">
                         <span>⚠️</span>
                         <span>This order was cancelled. Please contact customer support if you have billing concerns.</span>
+                      </div>
+                    )}
+
+                    {/* Delivery Lifecycle Actions */}
+                    {order.status !== 'cancelled' && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                        <div className="text-xs">
+                          {order.status === 'delivered' ? (
+                            <span className="inline-flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
+                              ✓ Delivery Confirmed
+                            </span>
+                          ) : order.status === 'shipped' || order.status === 'out_for_delivery' ? (
+                            <span className="inline-flex items-center gap-1 text-purple-700 font-semibold bg-purple-50 px-2.5 py-1 rounded border border-purple-200 text-[11px]">
+                              📦 In Transit — Please confirm once received
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-[11px]">
+                              Handcrafted by local artisans. Delivery tracking updates automatically.
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {(order.status === 'shipped' || order.status === 'out_for_delivery') && (
+                            <button
+                              onClick={() => handleConfirmReceived(order.id)}
+                              disabled={confirmingOrderId === order.id}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              {confirmingOrderId === order.id ? (
+                                'Confirming...'
+                              ) : (
+                                <>
+                                  <span>✓</span> Confirm Order Received / ವಿತರಣೆ ಖಚಿತಪಡಿಸಿ
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {order.status === 'delivered' && (
+                            <button
+                              onClick={() => handleTabChange('reviews')}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>⭐</span> Write Review
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => setDeliveryHelpOrderId(deliveryHelpOrderId === order.id ? null : order.id)}
+                            className="px-3 py-1.5 border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium text-xs rounded transition-colors cursor-pointer"
+                          >
+                            Need Help?
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Delivery Help Accordion */}
+                    {deliveryHelpOrderId === order.id && (
+                      <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900 space-y-2 animate-fade-in">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <span>ℹ️</span> Delivery Assistance for Order #{order.id.slice(0, 8).toUpperCase()}
+                        </div>
+                        <p className="m-0 leading-relaxed text-[11px]">
+                          If your delivery is delayed, damaged in transit, or hasn't arrived, our artisan support team is here to help.
+                          Contact support at <strong className="underline">support@artisanconnect.ai</strong> or submit an enquiry directly to the artisan.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -738,36 +1111,69 @@ export default function BuyerProfile() {
                   day: 'numeric'
                 });
 
+                const isTarget = targetEnquiryId === enq.id;
+                const unitPrice = enq.products?.price || 0;
+                const qty = enq.quantity || 1;
+                const listTotal = unitPrice * qty;
+                const currentBudget = Number(enq.budget || 0);
+                const counterAmount = Number(enq.counteroffer_amount || 0);
+                const hasCounter = counterAmount > 0;
+                const messagesList = enquiryMessagesMap[enq.id] || [];
+                const feedback = enquiryActionFeedback[enq.id];
+                const isActioning = actionInProgressEnquiryId === enq.id;
+                const isCounterOpen = !!showCounterInputMap[enq.id];
+
                 return (
-                  <div key={enq.id} className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-4 animate-fade-in">
+                  <div
+                    key={enq.id}
+                    id={`enquiry-${enq.id}`}
+                    className={`bg-white border rounded-lg p-5 shadow-sm space-y-4 animate-fade-in ${
+                      isTarget ? 'border-gov-navy ring-2 ring-gov-navy/30' : 'border-slate-200'
+                    }`}
+                  >
                     {/* Enquiry Header */}
                     <div className="flex justify-between items-start gap-4 border-b border-slate-100 pb-3 text-xs">
                       <div>
                         <span className="text-[10px] text-slate-450 uppercase font-bold tracking-wider block">Product Context</span>
-                        <span className="font-bold text-slate-800 text-sm">{enq.products?.name}</span>
+                        <span className="font-bold text-slate-800 text-sm">{enq.products?.name || 'Custom Craft Inquiry'}</span>
                         <span className="text-slate-500 block mt-0.5">Artisan Shop: {enq.artisans?.business_name || 'Verified Artisan'}</span>
                       </div>
                       <div className="text-right">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                        <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-extrabold uppercase ${
+                          enq.status === 'confirmed' ? 'bg-teal-100 text-teal-800' :
+                          enq.status === 'offer_accepted' ? 'bg-emerald-100 text-emerald-800' :
+                          enq.status === 'offer_awaiting_response' || hasCounter ? 'bg-purple-100 text-purple-800' :
+                          enq.status === 'negotiation_ongoing' ? 'bg-blue-100 text-blue-800' :
                           enq.status === 'replied' || enq.status === 'responded' ? 'bg-green-100 text-green-800' :
-                          enq.status === 'sent_to_artisan' ? 'bg-blue-100 text-blue-800' :
                           'bg-amber-100 text-amber-800'
                         }`}>
-                          {enq.status}
+                          {enq.status === 'confirmed' ? '✓ Order Confirmed' :
+                           enq.status === 'offer_accepted' ? '✓ Offer Accepted' :
+                           enq.status === 'offer_awaiting_response' ? 'Counteroffer Received' :
+                           enq.status === 'negotiation_ongoing' ? 'Negotiating' :
+                           enq.status}
                         </span>
                         <span className="block text-[10px] text-slate-400 mt-1">{enqDate}</span>
                       </div>
                     </div>
 
-                    {/* Enquiry Details Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[11px] bg-slate-50 p-3 rounded border border-slate-150">
+                    {/* Enquiry Financial Breakdown Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] bg-slate-50 p-3 rounded border border-slate-150">
                       <div>
                         <span className="text-slate-400 block mb-0.5">Quantity</span>
-                        <span className="font-bold text-slate-800">{enq.quantity || 'Not specified'}</span>
+                        <span className="font-bold text-slate-800">{enq.quantity || 1} units</span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block mb-0.5">Total Budget</span>
-                        <span className="font-bold text-slate-800">{enq.budget ? `₹${Number(enq.budget).toFixed(2)}` : 'Not specified'}</span>
+                        <span className="text-slate-400 block mb-0.5">Listed Price</span>
+                        <span className="font-bold text-slate-800">
+                          {unitPrice > 0 ? `₹${unitPrice} (₹${listTotal})` : 'Custom Quote'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Your Proposed Budget</span>
+                        <span className="font-bold text-gov-navy">
+                          {enq.budget ? `₹${Number(enq.budget).toLocaleString('en-IN')}` : 'Flexible'}
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Required Date</span>
@@ -775,37 +1181,243 @@ export default function BuyerProfile() {
                           {enq.preferred_delivery_date ? new Date(enq.preferred_delivery_date).toLocaleDateString('en-IN') : 'Flexible'}
                         </span>
                       </div>
-                      <div>
-                        <span className="text-slate-400 block mb-0.5">Reference Image</span>
-                        {enq.reference_image_url ? (
-                          <a href={enq.reference_image_url} target="_blank" rel="noreferrer" className="text-gov-navy font-bold hover:underline">
-                            View File ↗
-                          </a>
-                        ) : (
-                          <span className="text-slate-500">None Provided</span>
-                        )}
+                    </div>
+
+                    {/* Reference Image if any */}
+                    {enq.reference_image_url && (
+                      <div className="text-xs">
+                        <span className="text-slate-400 text-[10px] uppercase font-bold block mb-1">Attached Reference:</span>
+                        <a href={enq.reference_image_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-gov-navy font-bold hover:underline">
+                          <span>📎</span> View Reference Design File ↗
+                        </a>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Message Box */}
-                    <div className="text-xs space-y-1">
-                      <span className="font-semibold text-slate-450 uppercase text-[9px] tracking-wider">Your Message:</span>
-                      <p className="text-slate-655 m-0 leading-relaxed font-sans bg-slate-50/50 p-2.5 rounded border border-slate-100 italic">
-                        "{enq.message}"
-                      </p>
-                    </div>
+                    {/* Mutual Order Confirmed Banner */}
+                    {enq.status === 'confirmed' && (
+                      <div className="bg-teal-50 border border-teal-200 rounded p-4 text-xs space-y-2">
+                        <div className="flex items-center gap-2 text-teal-800 font-bold text-sm">
+                          <span>🎉</span> Order Confirmed & Production In Progress!
+                        </div>
+                        <p className="text-slate-700 m-0">
+                          The artisan has reviewed and confirmed workshop scheduling for this custom order.
+                        </p>
+                        {enq.expected_ready_date && (
+                          <div className="text-teal-900 font-semibold">
+                            📅 Expected Ready Date: <strong>{new Date(enq.expected_ready_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>
+                          </div>
+                        )}
+                        {enq.production_notes && (
+                          <div className="bg-white/80 p-2.5 rounded border border-teal-150 text-slate-700 italic">
+                            "{enq.production_notes}"
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleTabChange('orders')}
+                          className="mt-2 bg-teal-700 hover:bg-teal-800 text-white font-bold text-[11px] px-3.5 py-1.5 rounded cursor-pointer transition-colors shadow-sm"
+                        >
+                          📦 View in My Orders Tab
+                        </button>
+                      </div>
+                    )}
 
-                    {/* Response Box */}
-                    {enq.artisan_response ? (
-                      <div className="bg-amber-50 border border-amber-250 p-4 rounded text-xs space-y-1.5">
-                        <span className="font-bold text-amber-800 block text-[10px] uppercase tracking-wider">👨‍🎨 Artisan Shop Response:</span>
-                        <p className="text-slate-700 m-0 leading-relaxed font-sans font-medium whitespace-pre-line">
-                          {enq.artisan_response}
+                    {/* Offer Accepted Banner */}
+                    {enq.status === 'offer_accepted' && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded p-4 text-xs space-y-1.5">
+                        <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                          <span>✓</span> Offer Agreed: ₹{(counterAmount || currentBudget).toLocaleString('en-IN')}
+                        </div>
+                        <p className="text-slate-700 m-0">
+                          You agreed to the proposed terms. The artisan is preparing workshop capacity and will confirm the expected completion date shortly.
                         </p>
                       </div>
-                    ) : (
-                      <div className="text-[10px] text-slate-400 italic">
-                        No reply yet. The artisan or government program administrator will respond shortly.
+                    )}
+
+                    {/* Active Negotiation / Counteroffer Banner */}
+                    {(enq.status === 'offer_awaiting_response' || hasCounter) && enq.status !== 'offer_accepted' && enq.status !== 'confirmed' && (
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-xs space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-purple-900 text-sm flex items-center gap-1.5">
+                            <span>🤝</span> Artisan Counteroffer Received
+                          </span>
+                          <span className="text-base font-extrabold text-purple-950">
+                            ₹{counterAmount.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-purple-800">
+                          <span>Equivalent: ₹{(counterAmount / qty).toFixed(2)} / unit</span>
+                          {listTotal > 0 && (
+                            <span>
+                              {counterAmount < listTotal
+                                ? `-₹${(listTotal - counterAmount).toLocaleString('en-IN')} (${(((listTotal - counterAmount) / listTotal) * 100).toFixed(0)}% below list)`
+                                : `+₹${(counterAmount - listTotal).toLocaleString('en-IN')}`}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Negotiation Action Buttons */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptOffer(enq)}
+                            disabled={isActioning}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                          >
+                            ✓ Accept Offer (₹{counterAmount.toLocaleString('en-IN')})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowCounterInputMap(prev => ({ ...prev, [enq.id]: !prev[enq.id] }))}
+                            disabled={isActioning}
+                            className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-4 py-2 rounded cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                          >
+                            💬 Negotiate / Propose Counter
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Counteroffer Input Form if toggled */}
+                    {isCounterOpen && (
+                      <div className="bg-slate-50 border border-slate-200 rounded p-3 text-xs space-y-2.5 animate-fade-in">
+                        <span className="font-bold text-slate-700 block text-[11px]">Propose Counter-Budget & Note:</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Counter Budget in ₹ (e.g. 3500)"
+                            value={counterBudgetMap[enq.id] || ''}
+                            onChange={(e) => setCounterBudgetMap(prev => ({ ...prev, [enq.id]: e.target.value }))}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Optional note for the artisan..."
+                            value={replyTextMap[enq.id] || ''}
+                            onChange={(e) => setReplyTextMap(prev => ({ ...prev, [enq.id]: e.target.value }))}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowCounterInputMap(prev => ({ ...prev, [enq.id]: false }))}
+                            className="px-3 py-1 bg-white border border-slate-300 rounded text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isActioning || !counterBudgetMap[enq.id]}
+                            onClick={() => handleSendCustomerMessage(enq, true)}
+                            className="px-4 py-1 bg-gov-saffron hover:bg-gov-saffron-light text-white rounded text-[11px] font-bold shadow-sm disabled:opacity-50"
+                          >
+                            Submit Counteroffer
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Feedback Message */}
+                    {feedback && (
+                      <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded">
+                        ✓ {feedback}
+                      </div>
+                    )}
+
+                    {/* Conversation Chronology Thread */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">
+                        Conversation & Negotiation History
+                      </span>
+
+                      {/* Initial enquiry message */}
+                      <div className="bg-slate-50 p-3 rounded border border-slate-150 text-xs space-y-1">
+                        <div className="flex justify-between items-center text-[10px] text-slate-500 font-semibold">
+                          <span>👤 You (Initial Enquiry)</span>
+                          <span>{enqDate}</span>
+                        </div>
+                        <p className="text-slate-700 m-0 italic font-sans">
+                          "{enq.message}"
+                        </p>
+                      </div>
+
+                      {/* Additional persistent messages from enquiry_messages table */}
+                      {messagesList.map((msg) => {
+                        const isArtisan = msg.sender_role === 'artisan';
+                        const isSystem = msg.sender_role === 'system';
+                        const msgTime = new Date(msg.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`p-3 rounded text-xs space-y-1 border ${
+                              isSystem ? 'bg-amber-50/60 border-amber-200 text-amber-900' :
+                              isArtisan ? 'bg-amber-50 border-amber-200' :
+                              'bg-slate-50 border-slate-200'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center text-[10px] font-semibold">
+                              <span className={isArtisan ? 'text-amber-800' : 'text-slate-600'}>
+                                {isArtisan ? '👨‍🎨 Artisan Shop' : isSystem ? '⚙️ System Update' : '👤 You'}
+                                {msg.message_type === 'counteroffer' && ' • Counteroffer'}
+                                {msg.message_type === 'acceptance' && ' • Agreement'}
+                                {msg.message_type === 'production_confirmation' && ' • Production Scheduled'}
+                              </span>
+                              <span className="text-slate-400">{msgTime}</span>
+                            </div>
+                            <p className="text-slate-850 m-0 leading-relaxed font-sans whitespace-pre-line">
+                              {msg.message}
+                            </p>
+                            {msg.proposed_amount && (
+                              <div className="text-[10px] font-bold text-slate-700 pt-1">
+                                Proposed Total: ₹{Number(msg.proposed_amount).toLocaleString('en-IN')}
+                                {msg.unit_price_equivalent && ` (₹${msg.unit_price_equivalent}/unit)`}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Fallback to legacy artisan_response column if no messages loaded yet */}
+                      {messagesList.length === 0 && enq.artisan_response && (
+                        <div className="bg-amber-50 border border-amber-250 p-3 rounded text-xs space-y-1">
+                          <span className="font-bold text-amber-800 block text-[10px] uppercase tracking-wider">
+                            👨‍🎨 Artisan Shop Response:
+                          </span>
+                          <p className="text-slate-700 m-0 leading-relaxed font-sans font-medium whitespace-pre-line">
+                            {enq.artisan_response}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reply / Query Input at Bottom */}
+                    {enq.status !== 'confirmed' && enq.status !== 'closed' && (
+                      <div className="flex gap-2 pt-2 border-t border-slate-100">
+                        <input
+                          type="text"
+                          placeholder="Type a question or note for the artisan..."
+                          value={replyTextMap[enq.id] || ''}
+                          disabled={isActioning}
+                          onChange={(e) => setReplyTextMap(prev => ({ ...prev, [enq.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendCustomerMessage(enq, false);
+                            }
+                          }}
+                          className="flex-1 px-3 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                        />
+                        <button
+                          type="button"
+                          disabled={isActioning || !(replyTextMap[enq.id] || '').trim()}
+                          onClick={() => handleSendCustomerMessage(enq, false)}
+                          className="bg-gov-navy hover:bg-gov-navy-light text-white text-xs font-bold px-4 py-1.5 rounded cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                        >
+                          Send
+                        </button>
                       </div>
                     )}
                   </div>

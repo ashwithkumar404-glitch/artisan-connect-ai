@@ -27,6 +27,118 @@ function CustomerFeedbackPage() {
     }
   });
   const [copiedId, setCopiedId] = useState(null);
+  const [speakingId, setSpeakingId] = useState(null);
+
+  // Review Classification Helper
+  const classifyReview = (text = '', rating = 5) => {
+    const lower = (text || '').toLowerCase();
+    const r = Number(rating) || 5;
+
+    if (
+      lower.includes('delivery') ||
+      lower.includes('courier') ||
+      lower.includes('delay') ||
+      lower.includes('late') ||
+      lower.includes('tracking') ||
+      lower.includes('ವಿತರಣೆ') ||
+      lower.includes('ತಡ') ||
+      lower.includes('ಪ್ಯಾಕಿಂಗ್')
+    ) {
+      return {
+        type: 'delivery_issue',
+        labelKn: 'ವಿತರಣಾ ಸಮಸ್ಯೆ',
+        labelEn: 'Delivery Issue',
+        color: '#EA580C',
+        bg: 'rgba(234, 88, 12, 0.12)',
+        nextStepsKn: 'ಕೊರಿಯರ್ ಟ್ರ್ಯಾಕಿಂಗ್ ಪರಿಶೀಲಿಸಿ ಅಥವಾ ಪಾರ್ಸೆಲ್ ಸ್ಥಿತಿಗಾಗಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪಾಲುದಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ.',
+        nextStepsEn: 'Check courier dispatch tracking and contact logistics partner for consignment status.',
+        explanationKn: 'ಗ್ರಾಹಕರು ಪಾರ್ಸೆಲ್ ವಿತರಣೆ ಅಥವಾ ಸಮಯದ ಬಗ್ಗೆ ಪ್ರತಿಕ್ರಿಯಿಸಿದ್ದಾರೆ.'
+      };
+    }
+
+    if (
+      lower.includes('broken') ||
+      lower.includes('damage') ||
+      lower.includes('scratch') ||
+      lower.includes('poor') ||
+      lower.includes('defect') ||
+      lower.includes('quality') ||
+      lower.includes('ಕಳಪೆ') ||
+      lower.includes('ಹಾಳಾಗಿದೆ') ||
+      lower.includes('ಹಾನಿ') ||
+      lower.includes('ಗುಣಮಟ್ಟ') ||
+      r <= 2
+    ) {
+      return {
+        type: 'quality_complaint',
+        labelKn: 'ಗುಣಮಟ್ಟದ ದೂರು',
+        labelEn: 'Quality Issue',
+        color: '#DC2626',
+        bg: 'rgba(220, 38, 38, 0.12)',
+        nextStepsKn: 'ಕರಕುಶಲ ಮುಕ್ತಾಯವನ್ನು ಪರಿಶೀಲಿಸಿ, ಗ್ರಾಹಕರಿಗೆ ಬದಲಿ ಉತ್ಪನ್ನ ಅಥವಾ ರಿಪೇರಿ ಬೆಂಬಲ ನೀಡಿ.',
+        nextStepsEn: 'Inspect craft finish; offer replacement or repair assistance to the customer.',
+        explanationKn: 'ಉತ್ಪನ್ನದ ಫಿನಿಶಿಂಗ್ ಅಥವಾ ಗುಣಮಟ್ಟದ ಕುರಿತು ಗ್ರಾಹಕರು ಕಾಳಜಿ ವ್ಯಕ್ತಪಡಿಸಿದ್ದಾರೆ.'
+      };
+    }
+
+    if (
+      lower.includes('suggest') ||
+      lower.includes('size') ||
+      lower.includes('color') ||
+      lower.includes('improve') ||
+      lower.includes('ಬದಲಾವಣೆ') ||
+      lower.includes('ಸಲಹೆ') ||
+      lower.includes('ದೊಡ್ಡದು') ||
+      lower.includes('ಚಿಕ್ಕದು') ||
+      r === 3
+    ) {
+      return {
+        type: 'suggestion',
+        labelKn: 'ಗ್ರಾಹಕರ ಸಲಹೆ',
+        labelEn: 'Suggestion',
+        color: '#2563EB',
+        bg: 'rgba(37, 99, 235, 0.12)',
+        nextStepsKn: 'ಮುಂದಿನ ಬ್ಯಾಚ್ ತಯಾರಿಕೆಯಲ್ಲಿ ಈ ವಿನ್ಯಾಸ ಅಥವಾ ಗಾತ್ರದ ಸಲಹೆಯನ್ನು ಗಮನದಲ್ಲಿಟ್ಟುಕೊಳ್ಳಿ.',
+        nextStepsEn: 'Consider this custom design or dimension suggestion in your next craft batch.',
+        explanationKn: 'ಗ್ರಾಹಕರು ಉತ್ಪನ್ನದ ಸುಧಾರಣೆಗಾಗಿ ಉಪಯುಕ್ತ ಸಲಹೆ ನೀಡಿದ್ದಾರೆ.'
+      };
+    }
+
+    return {
+      type: 'praise',
+      labelKn: 'ಮೆಚ್ಚುಗೆ',
+      labelEn: 'Praise',
+      color: '#059669',
+      bg: 'rgba(5, 150, 105, 0.12)',
+      nextStepsKn: 'ಗ್ರಾಹಕರಿಗೆ ಧನ್ಯವಾದ ಸಲ್ಲಿಸಿ ಮತ್ತು ನಿಮ್ಮ ಕಲೆಯ ಕಥೆಯನ್ನು ಹಂಚಿಕೊಳ್ಳಿ.',
+      nextStepsEn: 'Thank the customer and share your traditional artisan craft story.',
+      explanationKn: 'ಗ್ರಾಹಕರು ನಿಮ್ಮ ಕರಕುಶಲ ಕೆಲಸವನ್ನು ಮೆಚ್ಚಿಕೊಂಡಿದ್ದಾರೆ!'
+    };
+  };
+
+  // Voice speech synthesis
+  const speakExplanation = (id, textToSpeak) => {
+    if (!('speechSynthesis' in window)) {
+      alert(isKn ? 'ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಧ್ವನಿ ಬೆಂಬಲ ಲಭ್ಯವಿಲ್ಲ.' : 'Speech synthesis not supported in this browser.');
+      return;
+    }
+
+    if (speakingId === id) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.lang = isKn ? 'kn-IN' : 'en-IN';
+    utterance.rate = 0.9;
+    utterance.onend = () => setSpeakingId(null);
+    utterance.onerror = () => setSpeakingId(null);
+
+    setSpeakingId(id);
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Sync language
   const handleLangToggle = (lang) => {
@@ -391,6 +503,7 @@ function CustomerFeedbackPage() {
             const currentReplyText = replyDrafts.get(rev.id) || '';
             const hasSavedReply = savedReplies.has(rev.id);
             const savedReplyText = savedReplies.get(rev.id);
+            const classification = classifyReview(rev.review_text, rev.rating);
 
             return (
               <div
@@ -414,6 +527,22 @@ function CustomerFeedbackPage() {
                         📦 {prod.name}
                       </span>
                     )}
+                    <div>
+                      <span
+                        style={{
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '12px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          background: classification.bg,
+                          color: classification.color,
+                          display: 'inline-block',
+                          marginTop: '0.2rem'
+                        }}
+                      >
+                        🏷️ {isKn ? classification.labelKn : classification.labelEn}
+                      </span>
+                    </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ color: '#f59e0b', fontSize: '0.9rem' }}>
@@ -438,6 +567,53 @@ function CustomerFeedbackPage() {
                     />
                   </div>
                 )}
+
+                {/* Sentiment & Local-Language Analysis Card */}
+                <div
+                  style={{
+                    background: 'var(--chat-bg, #f8f5ee)',
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.8rem',
+                    border: '1px solid var(--border)',
+                    marginBottom: '0.6rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--primary-green)' }}>
+                      🔍 {isKn ? 'ವಿಮರ್ಶೆ ವಿಶ್ಲೇಷಣೆ (Bilingual Insight)' : 'Review Analysis'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        speakExplanation(
+                          rev.id,
+                          isKn
+                            ? `${classification.explanationKn} ಶಿಫಾರಸು: ${classification.nextStepsKn}`
+                            : `${classification.labelEn}. Recommendation: ${classification.nextStepsEn}`
+                        )
+                      }
+                      style={{
+                        background: speakingId === rev.id ? '#dc2626' : 'var(--card-bg, #ffffff)',
+                        color: speakingId === rev.id ? '#ffffff' : 'var(--primary-green)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        padding: '0.2rem 0.5rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {speakingId === rev.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಧ್ವನಿ ವಿವರಣೆ' : '🔊 Listen')}
+                    </button>
+                  </div>
+                  <p style={{ margin: '0 0 0.25rem', fontSize: '0.78rem', color: 'var(--text)', lineHeight: 1.4 }}>
+                    <strong>💡 {isKn ? 'ವಿವರಣೆ:' : 'Meaning:'}</strong> {classification.explanationKn}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--primary-green)', fontWeight: 600, lineHeight: 1.4 }}>
+                    <strong>🎯 {isKn ? 'ಮುಂದಿನ ಕ್ರಮ:' : 'Suggested Next Step:'}</strong>{' '}
+                    {isKn ? classification.nextStepsKn : classification.nextStepsEn}
+                  </p>
+                </div>
 
                 {/* Saved Artisan Reply Display */}
                 {hasSavedReply && !isReplying && (

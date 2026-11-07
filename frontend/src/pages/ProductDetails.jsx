@@ -140,25 +140,48 @@ export default function ProductDetails() {
         }
       }
 
-      const { error: insertError } = await supabase
+      const qtyNum = enquiryQty ? parseInt(enquiryQty) : null;
+      const budgetNum = enquiryBudget ? parseFloat(enquiryBudget) : null;
+
+      const { data: insertedEnquiry, error: insertError } = await supabase
         .from('enquiries')
         .insert({
           product_id: product.id,
           customer_id: user.id,
           artisan_id: product.artisan_id,
           message: enquiryMessage.trim(),
-          quantity: enquiryQty ? parseInt(enquiryQty) : null,
+          quantity: qtyNum,
           preferred_delivery_date: enquiryDate || null,
-          budget: enquiryBudget ? parseFloat(enquiryBudget) : null,
+          budget: budgetNum,
           reference_image_url: referenceImageUrl,
-          status: 'submitted'
-        });
+          status: 'pending'
+        })
+        .select()
+        .single();
 
       if (insertError) {
         if (insertError.message && insertError.message.includes('row-level security')) {
           throw new Error('Unable to send enquiry due to security policy. Please ensure you are logged in to your customer account.');
         }
         throw insertError;
+      }
+
+      // Initialize conversation thread in enquiry_messages if supported
+      if (insertedEnquiry?.id) {
+        try {
+          const qty = qtyNum || 1;
+          await supabase.from('enquiry_messages').insert({
+            enquiry_id: insertedEnquiry.id,
+            sender_id: user.id,
+            sender_role: 'customer',
+            message: enquiryMessage.trim(),
+            message_type: budgetNum ? 'offer' : 'text',
+            proposed_amount: budgetNum,
+            unit_price_equivalent: budgetNum && qty > 0 ? Number((budgetNum / qty).toFixed(2)) : null
+          });
+        } catch (msgErr) {
+          console.warn('Initial enquiry message insertion skipped or fallback:', msgErr);
+        }
       }
 
       // Notify admins
@@ -179,6 +202,22 @@ export default function ProductDetails() {
           )
         );
         await Promise.all(promises);
+      }
+
+      // Notify the artisan directly
+      if (product.artisans?.profile_id) {
+        try {
+          await createNotification(
+            product.artisans.profile_id,
+            'enquiry_received',
+            'New Custom Order Enquiry',
+            `A customer submitted an enquiry for "${product.name}"${enquiryQty ? ` (Qty: ${enquiryQty})` : ''}.`,
+            product.id,
+            'enquiry'
+          );
+        } catch {
+          // non-blocking
+        }
       }
 
       setEnquirySuccess(true);
@@ -226,6 +265,7 @@ export default function ProductDetails() {
             ),
             artisans (
               id,
+              profile_id,
               business_name,
               location,
               verification_status,
@@ -258,7 +298,8 @@ export default function ProductDetails() {
               ),
               artisans (
                 id,
-                business_name,
+                profile_id,
+              business_name,
                 location,
                 verification_status,
                 profiles (
@@ -744,6 +785,37 @@ export default function ProductDetails() {
                   />
                 </div>
               </div>
+
+              {enquiryQty && parseInt(enquiryQty) > 0 && (
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded text-xs space-y-1.5">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Listed Price Estimate ({enquiryQty} × ₹{product.price || 0}):</span>
+                    <span className="font-semibold text-slate-900">₹{((product.price || 0) * parseInt(enquiryQty)).toLocaleString('en-IN')}</span>
+                  </div>
+                  {enquiryBudget && (
+                    <>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Your Proposed Budget:</span>
+                        <span className="font-bold text-gov-navy">₹{parseFloat(enquiryBudget).toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Equivalent Price Per Unit:</span>
+                        <span className="font-medium text-slate-800">
+                          ₹{(parseFloat(enquiryBudget) / parseInt(enquiryQty)).toFixed(2)} / unit
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-amber-200/60 font-semibold">
+                        <span>Budget Difference:</span>
+                        <span className={parseFloat(enquiryBudget) < ((product.price || 0) * parseInt(enquiryQty)) ? 'text-amber-700' : 'text-emerald-700'}>
+                          {parseFloat(enquiryBudget) < ((product.price || 0) * parseInt(enquiryQty))
+                            ? `-₹${(((product.price || 0) * parseInt(enquiryQty)) - parseFloat(enquiryBudget)).toLocaleString('en-IN')} (${(((product.price || 0) * parseInt(enquiryQty) - parseFloat(enquiryBudget)) / ((product.price || 0) * parseInt(enquiryQty)) * 100).toFixed(0)}% below list)`
+                            : `+₹${(parseFloat(enquiryBudget) - ((product.price || 0) * parseInt(enquiryQty))).toLocaleString('en-IN')}`}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">

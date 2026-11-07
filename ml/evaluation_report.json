@@ -1,0 +1,493 @@
+{
+  "timestamp": "2026-11-06T15:33:20Z",
+  "dataset_summary": {
+    "total_samples": 77,
+    "train_samples": 61,
+    "test_samples": 16,
+    "num_categories": 7,
+    "categories": [
+      "Bamboo & Natural Craft",
+      "Handloom & Textiles",
+      "Jewellery",
+      "Metal Craft",
+      "Other Handicrafts",
+      "Pottery",
+      "Wood Craft"
+    ],
+    "price_stats": {
+      "min": 220.0,
+      "max": 4500.0,
+      "mean": 937.01,
+      "median": 650.0
+    }
+  },
+  "classification_benchmark": {
+    "best_model": "Logistic Regression",
+    "best_macro_f1": 0.8,
+    "models": {
+      "Majority Baseline": {
+        "model_type": "Majority Baseline",
+        "accuracy": 0.125,
+        "macro_f1": 0.0317,
+        "weighted_f1": 0.0278,
+        "macro_precision": 0.0179,
+        "macro_recall": 0.1429,
+        "train_time_ms": 10.32,
+        "latency_per_sample_ms": 0.004,
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ]
+        ],
+        "classes": [
+          "Bamboo & Natural Craft",
+          "Handloom & Textiles",
+          "Jewellery",
+          "Metal Craft",
+          "Other Handicrafts",
+          "Pottery",
+          "Wood Craft"
+        ]
+      },
+      "Logistic Regression": {
+        "model_type": "Logistic Regression",
+        "accuracy": 0.8125,
+        "macro_f1": 0.8,
+        "weighted_f1": 0.8125,
+        "macro_precision": 0.881,
+        "macro_recall": 0.8095,
+        "train_time_ms": 101.58,
+        "latency_per_sample_ms": 0.411,
+        "confusion_matrix": [
+          [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            2
+          ]
+        ],
+        "classes": [
+          "Bamboo & Natural Craft",
+          "Handloom & Textiles",
+          "Jewellery",
+          "Metal Craft",
+          "Other Handicrafts",
+          "Pottery",
+          "Wood Craft"
+        ]
+      },
+      "Decision Tree": {
+        "model_type": "Decision Tree",
+        "accuracy": 0.4375,
+        "macro_f1": 0.4452,
+        "weighted_f1": 0.4646,
+        "macro_precision": 0.5238,
+        "macro_recall": 0.4286,
+        "train_time_ms": 37.49,
+        "latency_per_sample_ms": 0.364,
+        "confusion_matrix": [
+          [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            2,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "classes": [
+          "Bamboo & Natural Craft",
+          "Handloom & Textiles",
+          "Jewellery",
+          "Metal Craft",
+          "Other Handicrafts",
+          "Pottery",
+          "Wood Craft"
+        ]
+      },
+      "Random Forest": {
+        "model_type": "Random Forest",
+        "accuracy": 0.625,
+        "macro_f1": 0.6429,
+        "weighted_f1": 0.6375,
+        "macro_precision": 0.7024,
+        "macro_recall": 0.6429,
+        "train_time_ms": 805.52,
+        "latency_per_sample_ms": 4.829,
+        "confusion_matrix": [
+          [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        ],
+        "classes": [
+          "Bamboo & Natural Craft",
+          "Handloom & Textiles",
+          "Jewellery",
+          "Metal Craft",
+          "Other Handicrafts",
+          "Pottery",
+          "Wood Craft"
+        ]
+      },
+      "AdaBoost": {
+        "model_type": "AdaBoost",
+        "accuracy": 0.375,
+        "macro_f1": 0.4048,
+        "weighted_f1": 0.4042,
+        "macro_precision": 0.5179,
+        "macro_recall": 0.381,
+        "train_time_ms": 790.6,
+        "latency_per_sample_ms": 4.491,
+        "confusion_matrix": [
+          [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            2,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            1
+          ]
+        ],
+        "classes": [
+          "Bamboo & Natural Craft",
+          "Handloom & Textiles",
+          "Jewellery",
+          "Metal Craft",
+          "Other Handicrafts",
+          "Pottery",
+          "Wood Craft"
+        ]
+      }
+    }
+  },
+  "regression_benchmark": {
+    "best_model": "Random Forest Regressor",
+    "best_mae_inr": 402.61,
+    "models": {
+      "Mean Baseline": {
+        "model_type": "Mean Baseline",
+        "mae_inr": 596.16,
+        "rmse_inr": 796.94,
+        "r2_score": -0.0184,
+        "train_time_ms": 0.18,
+        "latency_per_sample_ms": 0.002
+      },
+      "Linear Regression (Ridge)": {
+        "model_type": "Linear Regression (Ridge)",
+        "mae_inr": 419.01,
+        "rmse_inr": 658.22,
+        "r2_score": 0.3053,
+        "train_time_ms": 36.64,
+        "latency_per_sample_ms": 0.641
+      },
+      "Decision Tree Regressor": {
+        "model_type": "Decision Tree Regressor",
+        "mae_inr": 524.44,
+        "rmse_inr": 825.12,
+        "r2_score": -0.0917,
+        "train_time_ms": 34.56,
+        "latency_per_sample_ms": 0.355
+      },
+      "Random Forest Regressor": {
+        "model_type": "Random Forest Regressor",
+        "mae_inr": 402.61,
+        "rmse_inr": 673.33,
+        "r2_score": 0.273,
+        "train_time_ms": 891.64,
+        "latency_per_sample_ms": 4.325
+      }
+    }
+  },
+  "production_recommendation": {
+    "category_classifier": "Logistic Regression",
+    "price_recommender": "Random Forest Regressor",
+    "status": "READY_FOR_DEPLOYMENT"
+  }
+}

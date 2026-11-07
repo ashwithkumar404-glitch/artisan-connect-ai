@@ -1,632 +1,197 @@
 # 🧵 Artisan Connect AI
 
-### AI-Powered Digital Enablement Platform for Indian Artisans
+### AI-Assisted Digital Commerce and Workshop Management for Indian Artisans
 
-Artisan Connect AI is a web-based platform designed to help **Indian artisans digitally showcase, manage, and sell their handmade products**.
-
-The project is not intended to replace existing government or commercial marketplaces. Instead, it focuses on the **gaps between artisans and existing digital systems** by providing AI-assisted tools, simple workflows, product management, customer interaction, verification, and market support.
+**Artisan Connect AI** is a dual-application web platform built to bridge the digital divide for traditional and rural Indian artisans. It combines a customer-facing marketplace with an artisan-facing business management assistant featuring bilingual voice-assisted product listing, customer enquiry negotiation, production tracking, and craft analytics.
 
 ---
 
-## 🎯 Problem Statement
+## 📌 Problem Statement
 
-Many traditional and marginalized artisans have valuable handmade products but face difficulties in entering and using digital marketplaces.
-
-### Major Challenges
-
-* Limited digital presence and market reach
-* Low-quality product photographs
-* Difficulty creating digital product descriptions
-* Lack of awareness about suitable market pricing
-* Difficulty communicating custom requirements with customers
-* Limited digital literacy
-* Difficulty maintaining product and order information
-* Lack of a simple trust and verification mechanism
+Traditional Indian artisans possess generational craft skills but face steep systemic barriers when attempting to sell online:
+- **Digital Literacy & Language Barriers:** Most e-commerce portals require English-only text input, complex product cataloguing forms, and intricate merchant dashboards.
+- **Listing & Pricing Friction:** Artisans struggle to write structured English descriptions or gauge suitable market pricing from unstandardized handmade items.
+- **Communication & Negotiation Gaps:** Handcrafted products frequently involve bulk orders, custom dimensions, or ceremonial timelines that require two-way price negotiation, which rigid cart-and-checkout systems do not accommodate.
+- **Logistics & Order Tracking:** Lack of structured workshop production stages and simple dispatch recording leads to delivery misunderstandings.
 
 ---
 
-## 💡 Proposed Solution
+## 🎯 Objectives & Proposed Solution
 
-Artisan Connect AI provides a simple digital platform connecting:
+Artisan Connect AI addresses these challenges with two complementary applications sharing a unified, secure database:
 
-**Artisans → Products → Customers → Orders → Feedback**
-
-The platform combines marketplace functionality with AI-assisted features to reduce the technical effort required from artisans.
-
-The main objective is:
-
-> **To make digital selling simpler for artisans while improving product visibility, customer access, trust, and communication.**
+1. **Customer Marketplace (`frontend/`):** A responsive e-commerce storefront where buyers discover authentic crafts, inspect verified artisan credentials, submit bulk enquiries with proposed budgets, negotiate prices directly, and track orders.
+2. **Artisan Assistant (`artisan-assistant/`):** A mobile-first workshop assistant offering local-language (Kannada & English) voice input, rule-based product fact extraction, order production stage checklists, carrier dispatch logging, and performance analytics.
+3. **Machine Learning Pipeline (`ml/`):** An audited classification and price estimation benchmark for categorizing Indian crafts and suggesting baseline pricing.
 
 ---
 
-# 👥 User Roles
+## 🏗️ Technical Architecture
 
-## 1. Customer / Buyer
-
-Customers can discover and purchase handmade products.
-
-### Features
-
-* Browse products without login
-* View product details
-* Search and filter products
-* Add products to cart
-* Buy products directly
-* Checkout with delivery details
-* Track orders
-* Rate and review purchased products
-* Upload review photographs
-* Request customized products
-* Provide quantity, budget, preferred date, and reference image/sketch
-
-### Customer Flow
-
-```text
-Explore
-   ↓
-Product Details
-   ↓
-Login
-   ↓
-Cart / Buy Now
-   ↓
-Checkout
-   ↓
-Order
-   ↓
-Delivery Tracking
-   ↓
-Review & Rating
+```
+                    ┌───────────────────────────────────────────┐
+                    │            Artisan Connect AI             │
+                    └─────────────────────┬─────────────────────┘
+                                          │
+                  ┌───────────────────────┴───────────────────────┐
+                  ▼                                               ▼
+       ┌─────────────────────┐                         ┌─────────────────────┐
+       │ Customer Marketplace│                         │  Artisan Assistant  │
+       │     (frontend/)     │                         │ (artisan-assistant/)│
+       │    Port 5173        │                         │    Port 5174        │
+       └──────────┬──────────┘                         └──────────┬──────────┘
+                  │                                               │
+                  │   Enquiries, Orders, Reviews, Profiles        │
+                  └───────────────────────┬───────────────────────┘
+                                          ▼
+                         ┌─────────────────────────────────┐
+                         │       Supabase Backend          │
+                         │  - PostgreSQL + Row Level Sec.  │
+                         │  - GoTrue Auth (Session tokens) │
+                         │  - Storage (Images, Documents)  │
+                         │  - Deno Edge Functions (NLP)    │
+                         └─────────────────────────────────┘
+                                          │
+                                          ▼
+                         ┌─────────────────────────────────┐
+                         │       ML Benchmark (ml/)        │
+                         │  - TF-IDF + Logistic Regression │
+                         │  - Price Regression (RF / Ridge)│
+                         └─────────────────────────────────┘
 ```
 
 ---
 
-## 2. Artisan
+## 💻 Technologies Actually Used
 
-Artisans use the platform to digitally manage their products and customer interactions.
+- **Frontend & UI Frameworks:**
+  - React 18 / 19
+  - Vite (Rolldown / ESBuild)
+  - TailwindCSS (Marketplace)
+  - Pure Semantic CSS + CSS Variables (Artisan Assistant, Light/Dark theme support)
+  - Native SVG Data Visualizations (No bloated charting dependencies)
+- **Backend & Database:**
+  - Supabase PostgreSQL (Postgres 15+)
+  - Supabase Row Level Security (RLS) policies for customer/artisan data separation
+  - Supabase Storage Buckets (`product-images`, `artisan-verification`, `review-photos`)
+  - Supabase GoTrue Authentication (Email/Password, Session Tokens, Artisan Application IDs)
+- **Local Voice & Natural Language Processing:**
+  - Browser Web Speech Recognition API (`webkitSpeechRecognition` / `SpeechRecognition`)
+  - Local deterministic Kannada NLP engine (`kannadaProductEngine.js`) for keyword, material, price, and numeral extraction
+  - Browser Speech Synthesis API (`window.speechSynthesis`) for bilingual review playback
+- **Machine Learning & Data Science:**
+  - Python 3.14 (Virtual Environment in `.venv/`)
+  - Scikit-Learn (TF-IDF Vectorizer, Logistic Regression, Decision Trees, Random Forest, AdaBoost, Ridge)
+  - Pandas & NumPy for dataset preparation and verification
+  - Pytest for dataset validation and training rule enforcement
 
-### Features
+---
 
-* Artisan dashboard
-* Create and manage products
-* Upload product images
-* Manage product information
-* View received orders
-* Update order fulfillment status
-* View customer reviews
-* Respond to custom enquiries
-* Receive pricing/customization requests
-* Submit verification documents
+## 📦 Main Application Modules
 
-### Order Fulfillment
+| Module | Directory | Purpose | Key Routes / Entrypoints |
+| :--- | :--- | :--- | :--- |
+| **Customer Marketplace** | `frontend/` | Public browsing, product details, bulk enquiry submission, buyer profile, order history | `/`, `/explore`, `/product/:id`, `/profile`, `/checkout` |
+| **Artisan Assistant** | `artisan-assistant/` | Artisan workshop hub, voice listing creation, enquiry negotiation, order stages, reviews, analytics | `/`, `/whatsapp`, `/my-products`, `/my-orders`, `/customer-feedback`, `/product-performance` |
+| **Machine Learning** | `ml/` | Product classification and price regression benchmarks, dataset audit tools | `ml/benchmark_models.py`, `ml/train.py`, `ml/audit_dataset.py` |
+| **Database Migrations** | `supabase/migrations/` | Versioned SQL schemas, constraints, RLS policies | `20261001000000_*.sql` to `20261106000000_*.sql` |
 
-```text
-Confirmed
-    ↓
-Preparing
-    ↓
-Shipped
-    ↓
-Out for Delivery
-    ↓
-Delivered
+---
+
+## ⚙️ Installation & Setup
+
+### Prerequisites
+- **Node.js:** v18.x or v20.x recommended
+- **npm:** v9.x or v10.x
+- **Python:** v3.10+ (for ML scripts in `ml/`)
+- **Git**
+
+### 1. Clone Repository & Install Dependencies
+```bash
+git clone https://github.com/ashwithkumar404-glitch/artisan-connect-ai.git
+cd artisan-connect-ai
+
+# Install root dependencies
+npm install
+
+# Install Artisan Assistant dependencies
+npm install --prefix artisan-assistant
+
+# Install Customer Marketplace dependencies
+npm install --prefix frontend
+```
+
+### 2. Environment Configuration
+Copy `.env.example` in both applications and populate your Supabase URL and Anon Key:
+
+```bash
+# In artisan-assistant/.env.local:
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_MARKETPLACE_URL=http://localhost:5173
+
+# In frontend/.env.local:
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+> **Security Note:** Never commit `.env` or `.env.local` files, service-role keys, or private tokens to Git.
+
+---
+
+## 🚀 Running the Applications
+
+You can start both applications independently or run both in separate terminals:
+
+```bash
+# Terminal 1: Run Customer Marketplace (Port 5173)
+npm run dev:marketplace
+# URL: http://localhost:5173
+
+# Terminal 2: Run Artisan Assistant (Port 5174)
+npm run dev:artisan
+# URL: http://localhost:5174
 ```
 
 ---
 
-## 3. Admin / Government Support Role
+## 🧪 Running Automated Tests & Production Builds
 
-The Admin acts as a **trust, verification, and support layer**.
+### 1. Artisan Assistant Tests (Node Test Runner)
+```bash
+npm test --prefix artisan-assistant
+```
+*Current result: 124 passed across 15 test suites.*
 
-The role can represent an authorized administrator or, in a future institutional deployment, a suitable government/Panchayat representative.
+### 2. Machine Learning Tests (Pytest)
+```bash
+cd ml
+..\.venv\Scripts\python.exe -m pytest tests -v
+```
+*Current result: 34 passed across 4 test suites.*
 
-### Features
+### 3. Production Builds
+```bash
+# Build Artisan Assistant
+npm run build:artisan
 
-* Verify artisans
-* Review submitted documents
-* Approve or reject artisan verification
-* Manage artisan directory
-* Moderate products
-* Manage marketplace orders
-* Monitor enquiries
-* Review customer feedback
-* Maintain marketplace quality
-* Communicate relevant market or government information
-
----
-
-# 🤖 AI Integration
-
-AI is used to reduce the amount of technical work required from artisans.
-
-## 🖼️ 1. AI Image Enhancement
-
-Artisans may use basic smartphones to capture product photographs.
-
-The image may contain:
-
-* Blur
-* Noise
-* Poor lighting
-* Low resolution
-* Unclear product details
-
-AI-based image analysis and enhancement can help make the product image clearer and more suitable for digital presentation.
-
-### Process
-
-```text
-Product
-   ↓
-Photo Capture
-   ↓
-AI Image Analysis
-   ↓
-Image Enhancement
-   ↓
-Digital-Ready Product Image
+# Build Customer Marketplace
+npm run build:marketplace
 ```
 
----
-
-## 🎙️ 2. Voice-to-Text
-
-Some artisans may find typing difficult.
-
-Instead of manually writing product information, an artisan can describe the product using voice.
-
-```text
-Artisan Voice
-     ↓
-Speech-to-Text
-     ↓
-Product Information
-     ↓
-AI-Assisted Description
+### 4. Running ML Model Benchmarking
+```bash
+cd ml
+..\.venv\Scripts\python.exe benchmark_models.py
 ```
-
-This can also support multilingual/local-language workflows in future implementations.
-
----
-
-## 📝 3. AI-Assisted Catalog Creation
-
-AI can assist in creating:
-
-* Product name
-* Product description
-* Category
-* Tags
-* Basic product information
-
-This reduces the effort required to digitally catalog handmade products.
+*Evaluates 5 classification models and 4 regression models, outputs `ml/evaluation_report.json`, and serializes the best models to `ml/model/`.*
 
 ---
 
-## 💰 4. AI-Based Pricing Assistance
-
-A planned AI feature can help artisans understand suitable pricing by considering factors such as:
-
-* Product type
-* Quality
-* Quantity
-* Market prices
-* Similar products
-
-The goal is to provide **pricing guidance**, rather than automatically deciding the final selling price.
-
----
-
-# 🛒 Marketplace Features
-
-### Product Discovery
-
-Customers can:
-
-* Explore products
-* Sort by new arrivals
-* Sort by price
-* View popular products
-* View top-rated products
-* Check artisan verification
-* View ratings
-
-### Shopping Cart
-
-* Add products
-* Increase/decrease quantity
-* Check subtotal
-* Respect available stock
-* Remove products
-
-### Checkout
-
-Customers provide:
-
-* Name
-* Phone number
-* Address
-* City
-* State
-* PIN code
-
-Orders are stored in the database and connected with their respective products and customers.
-
----
-
-# 🎨 Custom Product Enquiries
-
-Customers can request customized handmade products.
-
-They can provide:
-
-* Product requirements
-* Quantity
-* Budget
-* Preferred delivery date
-* Reference sketch/image
-
-The artisan can review the request and respond with suitable pricing or information.
-
-This creates a direct communication workflow between the customer and artisan.
-
----
-
-# ⭐ Reviews & Ratings
-
-After receiving a product, customers can provide:
-
-* Star rating
-* Written review
-* Optional product photograph
-
-Reviews help:
-
-* Build customer trust
-* Improve product credibility
-* Give artisans feedback
-* Identify highly-rated products
-
----
-
-# 🛡️ Artisan Verification
-
-The platform includes an artisan verification workflow.
-
-Artisans can submit documents such as:
-
-* Government Identity Card
-* Crafts Certificate / Pehchan Card
-* Workshop or Handiwork Photograph
-
-The administrator reviews the submitted information and can approve or reject the verification.
-
-This provides an additional **trust layer** for the marketplace.
-
----
-
-# 🏗️ Technology Stack
-
-## Frontend
-
-| Technology | Purpose                                    |
-| ---------- | ------------------------------------------ |
-| React.js   | User interface and application development |
-| Vite       | Development and production build tool      |
-| JavaScript | Application logic                          |
-| JSX        | React component development                |
-| CSS        | Interface styling and responsive design    |
-
-## Backend & Database
-
-| Technology       | Purpose                    |
-| ---------------- | -------------------------- |
-| Supabase         | Backend platform           |
-| PostgreSQL       | Database                   |
-| Supabase Auth    | User authentication        |
-| Supabase Storage | Image and document storage |
-| Supabase RLS     | Database security          |
-
-## AI Techniques
-
-| Technique              | Purpose                               |
-| ---------------------- | ------------------------------------- |
-| AI Image Analysis      | Understand product images             |
-| Image Enhancement      | Improve product image quality         |
-| Speech-to-Text         | Convert artisan voice into text       |
-| AI-Assisted Cataloging | Generate product information          |
-| Pricing Assistance     | Provide market-based pricing guidance |
-
----
-
-# 🔐 Security Techniques
-
-## Row Level Security (RLS)
-
-Supabase PostgreSQL Row Level Security is used to control who can access and modify database records.
-
-For example:
-
-* Customers can access their own orders
-* Artisans can manage their own products
-* Artisans can access relevant orders
-* Admins can access administrative information
-
-## Role-Based Access
-
-Different users receive different capabilities:
-
-```text
-Customer
-   ↓
-Shopping & Orders
-
-Artisan
-   ↓
-Products & Fulfillment
-
-Admin
-   ↓
-Verification & Moderation
-```
-
-## Secure Storage
-
-Supabase Storage is used for:
-
-* Product images
-* Artisan verification documents
-* Review photographs
-
-Storage access is controlled using appropriate policies.
-
----
-
-# 🗄️ Database
-
-The application uses **PostgreSQL through Supabase**.
-
-### Main Tables
-
-```text
-profiles
-    ↓
-artisans
-    ↓
-products
-    ↓
-product_images
-
-profiles
-    ↓
-orders
-    ↓
-order_items
-
-products
-    ↓
-product_reviews
-
-artisans
-    ↓
-artisan_verifications
-
-customers
-    ↓
-enquiries
-    ↓
-notifications
-```
-
-### Core Tables
-
-* `profiles`
-* `artisans`
-* `categories`
-* `products`
-* `product_images`
-* `orders`
-* `order_items`
-* `product_reviews`
-* `artisan_verifications`
-* `enquiries`
-* `notifications`
-
----
-
-# 🏛️ System Architecture
-
-```text
-                    ARTISAN CONNECT AI
-                           │
-             ┌─────────────┼─────────────┐
-             │             │             │
-          Customer       Artisan       Admin
-             │             │             │
-             └─────────────┼─────────────┘
-                           │
-                     React + Vite
-                           │
-                    Supabase Backend
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-      PostgreSQL       Authentication     Storage
-          │
-          └──────────── AI Services
-```
-
----
-
-# 🚀 Running the Applications
-
-The repository contains two separate applications:
-
-### 1. 🏺 Artisan Assistant (Artisan Voice & WhatsApp-Style Assistant)
-* **Start command (from root):** `npm run dev:artisan` (or `npm run dev`)
-* **Alternative command:** `cd artisan-assistant && npm run dev`
-* **Local URL:** `http://localhost:5174/`
-* **WhatsApp Conversational Route:** `http://localhost:5174/whatsapp`
-* **Features:** Mobile-first voice/photo catalog assistant, continuous Kannada/English voice recognition, fact extraction, bilingual draft review, WhatsApp-style workflow, orders, earnings, performance analytics, and customer reviews.
-
-### 2. 🛍️ Customer Marketplace (Buyer Exploration & E-Commerce)
-* **Start command (from root):** `npm run dev:marketplace`
-* **Alternative command:** `cd frontend && npm run dev`
-* **Local URL:** `http://localhost:5173/`
-* **Features:** Product exploration, filter by crafts, product details, cart, checkout, order tracking, and reviews.
-
----
-
-# 📂 Application Structure
-
-```text
-Artisan-Connect-AI/
-│
-├── artisan-assistant/         # Dedicated Artisan Assistant application (Port 5174)
-│   ├── src/
-│   │   ├── components/        # Mobile-first components, Drawer, ThemeToggle, QuickActions
-│   │   ├── pages/             # HomePage, WhatsAppPlaceholderPage, CustomerFeedbackPage, ProductPerformancePage
-│   │   ├── lib/               # voiceRecognition, kannadaProductEngine, supabaseClient, AuthContext
-│   │   └── App.jsx
-│   ├── tests/                 # Unit & integration test suites
-│   ├── package.json
-│   └── vite.config.js         # Configured for Port 5174 (strictPort: true, host: true)
-│
-├── frontend/                  # Customer Marketplace application (Port 5173)
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── context/
-│   │   ├── lib/
-│   │   └── App.jsx
-│   │
-│   ├── public/
-│   ├── package.json
-│   └── vite.config.js
-│
-├── supabase/
-│   └── SQL setup / migration files
-│
-└── README.md
-```
-
----
-
-# 🔄 Complete Platform Workflow
-
-```text
-                    USER
-                      │
-          ┌───────────┴───────────┐
-          │                       │
-      Customer                  Artisan
-          │                       │
-      Explore                 Add Product
-          │                       │
-      Purchase              AI Assistance
-          │                       │
-       Checkout              Verification
-          │                       │
-        Order                 Manage Order
-          │                       │
-       Delivery                  Shipping
-          │                       │
-        Review                Customer Feedback
-          │                       │
-          └───────────┬───────────┘
-                      │
-                    Admin
-                      │
-              Verification
-              Moderation
-              Management
-                      │
-              Trusted Marketplace
-```
-
----
-
-# 📊 Current MVP
-
-The current MVP focuses on the complete basic marketplace workflow:
-
-* Customer marketplace
-* Product exploration
-* Product details
-* Shopping cart
-* Buy Now
-* Checkout
-* Order management
-* Order tracking
-* Artisan dashboard
-* Admin dashboard
-* Artisan verification
-* Product moderation
-* Reviews and ratings
-* Custom product enquiries
-* Notifications
-* Supabase authentication
-* PostgreSQL database
-* RLS-based security
-* Supabase Storage
-
----
-
-# 🔮 Future Scope
-
-The platform can be extended with:
-
-* Advanced AI image enhancement
-* Automated AI product catalog generation
-* Multilingual voice interaction
-* AI-powered market price analysis
-* WhatsApp integration
-* Government scheme notifications
-* Market opportunity notifications
-* Personalized product recommendations
-* Online payment integration
-* Delivery partner integration
-* Mobile application / PWA
-* Analytics for artisans
-* Integration with existing government and marketplace systems
-
----
-
-# 🌍 Impact
-
-Artisan Connect AI aims to help artisans:
-
-* Increase digital visibility
-* Reach more customers
-* Present products professionally
-* Reduce the difficulty of digital cataloging
-* Understand market opportunities
-* Communicate more easily with customers
-* Build trust through verification
-* Manage orders digitally
-
-### Our Vision
-
-> **We are not building another marketplace. We are building the digital bridge between artisans and the modern market — using AI to make digital selling simpler, more accessible, and more trustworthy.**
-
----
-
-# 📌 Project Status
-
-**Status:** MVP / Prototype
-
-The core marketplace, customer workflow, artisan workflow, admin management, verification, orders, reviews, enquiries, database, authentication, storage, and security layers have been implemented.
-
-AI capabilities such as advanced pricing intelligence, multilingual voice interaction, and extended catalog automation are planned for further development.
-
----
-
-# 👨‍💻 Team
-
-**Project:** Artisan Connect AI
-**Problem Statement:** SIH26090
-**Domain:** Artificial Intelligence & Machine Learning / Digital Marketplace
-**Purpose:** Digital enablement and market linkage for marginalized artisans
-
-
-
+## 📊 Current Implementation Status
+
+For a full breakdown of completed features, limitations, and future work, see:
+- [`PROJECT_DOCUMENTATION.md`](./PROJECT_DOCUMENTATION.md) — Comprehensive functional and technical workflow documentation.
+- [`ML_PERFORMANCE_REPORT.md`](./ML_PERFORMANCE_REPORT.md) — Genuine machine learning benchmark metrics and experimental disclaimers.
+- [`TESTING_AND_VALIDATION.md`](./TESTING_AND_VALIDATION.md) — Verified test results, bundle diagnostics, and known limitations.
+- [`PROJECT_STATUS.md`](./PROJECT_STATUS.md) — Current implementation milestones, items needing validation, and roadmap.

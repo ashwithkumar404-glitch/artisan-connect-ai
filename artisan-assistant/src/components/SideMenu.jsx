@@ -6,6 +6,17 @@ import ThemeToggle from './ThemeToggle.jsx';
 function SideMenu({ isOpen, onClose }) {
   const navigate = useNavigate();
   const { user, profile, artisan, signOut } = useAuth();
+  const [language, setLanguage] = React.useState(() => localStorage.getItem('artisan_language') || 'kn');
+
+  React.useEffect(() => {
+    const handleLangChange = (e) => {
+      setLanguage(e.detail?.language || localStorage.getItem('artisan_language') || 'kn');
+    };
+    window.addEventListener('artisan-language-change', handleLangChange);
+    return () => window.removeEventListener('artisan-language-change', handleLangChange);
+  }, []);
+
+  const isKn = language === 'kn';
 
   const handleSignOut = async () => {
     await signOut();
@@ -95,14 +106,46 @@ function SideMenu({ isOpen, onClose }) {
         </div>
 
         <nav className="drawer-nav">
-          <Link className="drawer-link" to="/" onClick={onClose}>💬 Assistant Chat</Link>
-          <Link className="drawer-link" to="/my-products" onClick={onClose}>📦 My Products Catalog</Link>
-          <Link className="drawer-link" to="/add-product" onClick={onClose}>➕ Add Product Form</Link>
-          <Link className="drawer-link" to="/my-orders" onClick={onClose}>📋 My Orders</Link>
-          <Link className="drawer-link" to="/my-earnings" onClick={onClose}>💰 My Earnings</Link>
-          <Link className="drawer-link" to="/product-performance" onClick={onClose}>📈 Product Performance</Link>
-          <Link className="drawer-link" to="/customer-feedback" onClick={onClose}>⭐ Customer Reviews</Link>
-          <Link className="drawer-link" to="/whatsapp" onClick={onClose}>📱 WhatsApp Channel</Link>
+          <div style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--secondary-text)', padding: '0.4rem 0.6rem 0.2rem' }}>
+            {isKn ? 'ವ್ಯವಹಾರ ನಿರ್ವಹಣಾ ಕೇಂದ್ರ' : 'Business Management Centre'}
+          </div>
+          <Link className="drawer-link" to="/" onClick={onClose}>
+            🤖 {isKn ? 'ಧ್ವನಿ ಸಹಾಯಕ (ಚಾಟ್)' : 'AI Voice Assistant'}
+          </Link>
+          <Link className="drawer-link" to="/whatsapp" onClick={onClose}>
+            📱 {isKn ? 'ವಾಟ್ಸಾಪ್ ಸಹಾಯಕ' : 'WhatsApp Assistant'}
+          </Link>
+          <Link className="drawer-link" to="/my-products" onClick={onClose}>
+            📦 {isKn ? 'ನನ್ನ ಉತ್ಪನ್ನಗಳು' : 'My Products'}
+          </Link>
+          <Link className="drawer-link" to="/whatsapp?action=check_enquiries" onClick={onClose}>
+            💬 {isKn ? 'ಗ್ರಾಹಕರ ವಿಚಾರಣೆಗಳು' : 'Enquiries'}
+          </Link>
+          <Link className="drawer-link" to="/my-orders" onClick={onClose}>
+            📋 {isKn ? 'ನನ್ನ ಆರ್ಡರ್‌ಗಳು' : 'My Orders'}
+          </Link>
+          <Link className="drawer-link" to="/my-orders?tab=preparing" onClick={onClose}>
+            🔨 {isKn ? 'ಉತ್ಪಾದನೆ & ಸಿದ್ಧತೆ' : 'Production & Preparation'}
+          </Link>
+          <Link className="drawer-link" to="/my-orders?tab=delivery" onClick={onClose}>
+            🚚 {isKn ? 'ವಿತರಣೆ & ರವಾನೆ' : 'Delivery & Dispatch'}
+          </Link>
+          <Link className="drawer-link" to="/customer-feedback" onClick={onClose}>
+            ⭐ {isKn ? 'ಗ್ರಾಹಕರ ವಿಮರ್ಶೆಗಳು' : 'Customer Reviews'}
+          </Link>
+          <Link className="drawer-link" to="/product-performance" onClick={onClose}>
+            📈 {isKn ? 'ಕಾರ್ಯಕ್ಷಮತೆ & ಅಂಕಿಅಂಶ' : 'Performance Insights'}
+          </Link>
+
+          <div style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--secondary-text)', padding: '0.8rem 0.6rem 0.2rem', borderTop: '1px solid var(--border)', marginTop: '0.4rem' }}>
+            {isKn ? 'ಹೆಚ್ಚುವರಿ ಉಪಕರಣಗಳು' : 'Quick Actions'}
+          </div>
+          <Link className="drawer-link" to="/add-product" onClick={onClose}>
+            ➕ {isKn ? 'ಹೊಸ ಉತ್ಪನ್ನ ಸೇರಿಸಿ' : 'Add New Product'}
+          </Link>
+          <Link className="drawer-link" to="/my-earnings" onClick={onClose}>
+            💰 {isKn ? 'ಗಳಿಕೆ ವಿವರ' : 'My Earnings'}
+          </Link>
 
           {user ? (
             <button

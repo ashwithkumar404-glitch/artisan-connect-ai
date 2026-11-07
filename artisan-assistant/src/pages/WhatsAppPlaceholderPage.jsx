@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import ThemeToggle from "../components/ThemeToggle.jsx";
@@ -26,6 +26,7 @@ function fileToBase64(file) {
 
 function WhatsAppPlaceholderPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, profile, artisan, authLoading } = useAuth();
 
   // Language state: 'kn' (Kannada) or 'en' (English)
@@ -108,6 +109,14 @@ function WhatsAppPlaceholderPage() {
 
     setMessages([welcomeMsg]);
   }, [authLoading, artisan, profile, isKn]);
+
+  // Handle deep-linked enquiry parameter from notifications
+  useEffect(() => {
+    const enqParam = searchParams.get('enquiryId');
+    if (enqParam && artisan?.id) {
+      handleCheckEnquiries(enqParam);
+    }
+  }, [searchParams, artisan?.id]);
 
   // Helper to append message
   const addMessage = (sender, text, extra = {}) => {
@@ -244,21 +253,41 @@ function WhatsAppPlaceholderPage() {
   };
 
   // Check customer custom enquiries
-  const handleCheckEnquiries = async () => {
+  const handleCheckEnquiries = async (specificEnquiryId = null) => {
     if (!artisan?.id) {
       addMessage('assistant', isKn ? "⚠️ ವಿಚಾರಣೆಗಳನ್ನು ನೋಡಲು ಲಾಗಿನ್ ಅಗತ್ಯವಿದೆ." : "⚠️ Please sign in to check enquiries.");
       return;
     }
     try {
       addMessage('artisan', isKn ? "💬 ಗ್ರಾಹಕರ ಕಸ್ಟಮ್ ವಿಚಾರಣೆಗಳನ್ನು ತೋರಿಸಿ." : "💬 Show customer custom enquiries.");
-      const { data: enqData, error: enqErr } = await supabase
+      let query = supabase
         .from('enquiries')
-        .select('id, product_id, customer_id, message, status, quantity, preferred_delivery_date, budget, reference_image_url, artisan_response, created_at')
-        .eq('artisan_id', artisan.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
+        .select('id, product_id, customer_id, message, status, quantity, preferred_delivery_date, budget, reference_image_url, artisan_response, counteroffer_amount, expected_ready_date, customer_accepted_at, artisan_confirmed_at, production_notes, order_id, created_at')
+        .eq('artisan_id', artisan.id);
 
-      if (enqErr) throw enqErr;
+      if (specificEnquiryId) {
+        query = query.eq('id', specificEnquiryId);
+      } else {
+        query = query.order('created_at', { ascending: false }).limit(5);
+      }
+
+      let { data: enqData, error: enqErr } = await query;
+      if (enqErr) {
+        // Fallback for older DB versions
+        console.warn('Enquiries select fallback:', enqErr.message);
+        let fbQuery = supabase
+          .from('enquiries')
+          .select('id, product_id, customer_id, message, status, quantity, preferred_delivery_date, budget, reference_image_url, artisan_response, created_at')
+          .eq('artisan_id', artisan.id);
+        if (specificEnquiryId) {
+          fbQuery = fbQuery.eq('id', specificEnquiryId);
+        } else {
+          fbQuery = fbQuery.order('created_at', { ascending: false }).limit(5);
+        }
+        const fbRes = await fbQuery;
+        if (fbRes.error) throw fbRes.error;
+        enqData = fbRes.data;
+      }
 
       if (!enqData || enqData.length === 0) {
         addMessage('assistant', isKn
@@ -275,10 +304,10 @@ function WhatsAppPlaceholderPage() {
       }
 
       const pIds = [...new Set(enqData.map(e => e.product_id).filter(Boolean))];
-      let pNameMap = new Map();
+      let pMap = new Map();
       if (pIds.length > 0) {
-        const { data: prods } = await supabase.from('products').select('id, name').in('id', pIds);
-        if (prods) pNameMap = new Map(prods.map(p => [p.id, p.name]));
+        const { data: prods } = await supabase.from('products').select('id, name, price').in('id', pIds);
+        if (prods) pMap = new Map(prods.map(p => [p.id, p]));
       }
 
       addMessage('assistant', isKn
@@ -287,16 +316,334 @@ function WhatsAppPlaceholderPage() {
       );
 
       for (const enq of enqData) {
+        const prod = pMap.get(enq.product_id);
+        const unitPrice = Number(prod?.price || 0);
+        const qty = Number(enq.quantity || 0);
+        const budget = Number(enq.budget || 0);
+        const estimate = unitPrice > 0 && qty > 0 ? unitPrice * qty : null;
+        const diff = estimate && budget ? estimate - budget : null;
+
+        // Smart local Kannada translation of customer message
+        let knTranslation = '';
+        if (enq.message) {
+          let kn = enq.message;
+          kn = kn.replace(/can you make (\d+) pieces/gi, '$1 ತುಂಡುಗಳನ್ನು ತಯಾರಿಸಲು ಸಾಧ್ಯವೇ');
+          kn = kn.replace(/pieces|pcs/gi, 'ತುಂಡುಗಳು');
+          kn = kn.replace(/blue lacquer finish/gi, 'ನೀಲಿ ಲ್ಯಾಕರ್ ಫಿನಿಶಿಂಗ್');
+          kn = kn.replace(/discount/gi, 'ರಿಯಾಯಿತಿ');
+          kn = kn.replace(/custom order/gi, 'ಕಸ್ಟಮ್ ಆರ್ಡರ್');
+          kn = kn.replace(/bulk order/gi, 'ಸಗಟು ಆರ್ಡರ್');
+          kn = kn.replace(/urgent delivery/gi, 'ತುರ್ತು ವಿತರಣೆ');
+          kn = kn.replace(/budget/gi, 'ಬಜೆಟ್');
+          knTranslation = kn !== enq.message ? kn : `(ಗ್ರಾಹಕರ ಸಂದೇಶ: "${enq.message}")`;
+        }
+
         addMessage('assistant', '', {
           enquiryCard: {
             ...enq,
-            product_name: pNameMap.get(enq.product_id) || (isKn ? 'ಕರಕುಶಲ ಉತ್ಪನ್ನ' : 'Handicraft Item')
+            product_name: prod?.name || (isKn ? 'ಕರಕುಶಲ ಉತ್ಪನ್ನ' : 'Handicraft Item'),
+            unitPrice: unitPrice > 0 ? unitPrice : 400,
+            estimate: estimate || (qty > 0 ? qty * 400 : null),
+            diff,
+            knTranslation
           }
         });
       }
     } catch (err) {
       console.error('Error fetching enquiries in WhatsApp assistant:', err);
       addMessage('assistant', isKn ? "⚠️ ವಿಚಾರಣೆಗಳನ್ನು ಪಡೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to load enquiries.");
+    }
+  };
+
+  // Bulk Price Negotiation & Counteroffer
+  const handleNegotiateCounteroffer = async (enquiry, prefilledAmount = null, voiceNote = '') => {
+    const qty = Number(enquiry.quantity) || 1;
+    const est = enquiry.estimate || (qty * 400);
+    const bud = Number(enquiry.budget) || Math.round(est * 0.75);
+    const suggestedCounter = prefilledAmount || Math.round((est + bud) / 2);
+
+    let counterTotal = suggestedCounter;
+    if (!prefilledAmount) {
+      const promptText = isKn
+        ? `ಸಗಟು ಚೌಕಾಸಿ (Bulk Negotiation):\n` +
+          `• ಪಟ್ಟಿಮಾಡಿದ ಅಂದಾಜು: ₹${est}\n` +
+          `• ಗ್ರಾಹಕರ ಪ್ರಸ್ತಾಪ: ₹${bud}\n\n` +
+          `ನಿಮ್ಮ ಪ್ರತಿ-ಕೊಡುಗೆ ಮೊತ್ತವನ್ನು (Counteroffer Total in ₹) ನಮೂದಿಸಿ:`
+        : `Bulk Price Negotiation:\n` +
+          `• Listed Estimate: ₹${est}\n` +
+          `• Customer Proposal: ₹${bud}\n\n` +
+          `Enter your proposed counteroffer total in ₹:`;
+
+      const userAmount = window.prompt(promptText, String(suggestedCounter));
+      if (!userAmount || isNaN(parseFloat(userAmount))) return;
+      counterTotal = parseFloat(userAmount);
+    }
+
+    const counterPerUnit = Math.round(counterTotal / qty);
+
+    const confirmText = isKn
+      ? `ಪ್ರತಿ-ಕೊಡುಗೆ ದೃಢೀಕರಣ:\n` +
+        `ಒಟ್ಟು: ₹${counterTotal} (ಪ್ರತಿ ಯೂನಿಟ್‌ಗೆ ₹${counterPerUnit} - ${qty} ತುಂಡುಗಳು)\n` +
+        (voiceNote ? `ಧ್ವನಿ ಟಿಪ್ಪಣಿ: "${voiceNote}"\n\n` : `\n`) +
+        `ಗ್ರಾಹಕರಿಗೆ ಈ ಪ್ರತಿ-ಕೊಡುಗೆ ಕಳುಹಿಸಲು ಖಚಿತವಾಗಿದ್ದೀರಾ?`
+      : `Confirm Counteroffer:\n` +
+        `Total: ₹${counterTotal} (₹${counterPerUnit}/unit for ${qty} pieces)\n` +
+        (voiceNote ? `Voice note: "${voiceNote}"\n\n` : `\n`) +
+        `Send this counteroffer to the customer?`;
+
+    if (!window.confirm(confirmText)) return;
+
+    const replyMsg = isKn
+      ? `ನಮಸ್ಕಾರ, ನಿಮ್ಮ ${qty} ಕರಕುಶಲ ಕೃತಿಗಳ ಆರ್ಡರ್‌ಗೆ ನಮ್ಮ ವಿಶೇಷ ಪ್ರತಿ-ಕೊಡುಗೆ ₹${counterTotal} (ಪ್ರತಿ ಯೂನಿಟ್‌ಗೆ ₹${counterPerUnit}). ${voiceNote ? `(${voiceNote})` : 'ಅತ್ಯುತ್ತಮ ಗುಣಮಟ್ಟದೊಂದಿಗೆ ತಯಾರಿಸಿ ಕಳುಹಿಸಲಾಗುವುದು.'}`
+      : `Hello, thank you for your enquiry. We propose a special counteroffer of ₹${counterTotal} (₹${counterPerUnit}/unit for ${qty} pieces). ${voiceNote ? `(${voiceNote})` : 'Handcrafted with premium finishing.'}`;
+
+    try {
+      setProcessing(true);
+      const { error } = await supabase
+        .from('enquiries')
+        .update({
+          artisan_response: replyMsg,
+          counteroffer_amount: counterTotal,
+          status: 'offer_awaiting_response'
+        })
+        .eq('id', enquiry.id);
+
+      if (error) throw error;
+
+      // Persist in enquiry_messages
+      try {
+        await supabase.from('enquiry_messages').insert({
+          enquiry_id: enquiry.id,
+          sender_id: profile?.id || user?.id,
+          sender_role: 'artisan',
+          message: replyMsg,
+          message_type: 'counteroffer',
+          proposed_amount: counterTotal,
+          unit_price_equivalent: counterPerUnit,
+          kannada_translation: replyMsg
+        });
+      } catch (msgErr) {
+        console.warn('enquiry_messages insert fallback:', msgErr);
+      }
+
+      if (enquiry.customer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: enquiry.customer_id,
+            type: 'artisan_responded',
+            title: 'Artisan Counteroffer Received',
+            message: `Artisan sent a counteroffer of ₹${counterTotal} (₹${counterPerUnit}/unit) for your enquiry.`,
+            reference_id: enquiry.id,
+            reference_type: 'enquiry',
+            is_read: false
+          });
+        } catch {
+          // non-blocking
+        }
+      }
+
+      setMessages(prev => prev.map(m => {
+        if (m.enquiryCard && m.enquiryCard.id === enquiry.id) {
+          return {
+            ...m,
+            enquiryCard: {
+              ...m.enquiryCard,
+              artisan_response: replyMsg,
+              counteroffer_amount: counterTotal,
+              status: 'offer_awaiting_response'
+            }
+          };
+        }
+        return m;
+      }));
+
+      addMessage('assistant', isKn
+        ? `🤝 **ಪ್ರತಿ-ಕೊಡುಗೆ ಯಶಸ್ವಿಯಾಗಿ ಕಳುಹಿಸಲಾಗಿದೆ:**\n\n"${replyMsg}"\n\nಗ್ರಾಹಕರ ಅನುಮೋದನೆಗಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ.`
+        : `🤝 **Counteroffer sent successfully:**\n\n"${replyMsg}"\n\nAwaiting customer acceptance.`
+      );
+    } catch (err) {
+      console.error('Error sending counteroffer:', err);
+      addMessage('assistant', isKn ? "⚠️ ಪ್ರತಿ-ಕೊಡುಗೆ ಕಳುಹಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to send counteroffer.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Voice-based Counteroffer
+  const handleVoiceCounteroffer = async (enquiry) => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert(isKn ? 'ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಬೆಂಬಲವಿಲ್ಲ.' : 'Speech recognition is not supported in this browser.');
+      handleNegotiateCounteroffer(enquiry);
+      return;
+    }
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognizer = new SpeechRec();
+    recognizer.lang = isKn ? 'kn-IN' : 'en-IN';
+    recognizer.interimResults = false;
+    recognizer.maxAlternatives = 1;
+
+    addMessage('assistant', isKn
+      ? "🎙️ **ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಆಲಿಸಲಾಗುತ್ತಿದೆ...**\nದಯವಿಟ್ಟು ನಿಮ್ಮ ಪ್ರತಿ-ಕೊಡುಗೆ ಮೊತ್ತವನ್ನು ಮಾತನಾಡಿ (ಉದಾ: 'ಪ್ರತಿ-ಕೊಡುಗೆ 3500 ರೂಪಾಯಿ')."
+      : "🎙️ **Listening to voice input...**\nPlease speak your counteroffer amount (e.g. 'Counteroffer 3500 rupees')."
+    );
+
+    recognizer.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      const match = transcript.match(/\d+[\d,]*/);
+      let detectedAmount = match ? parseInt(match[0].replace(/,/g, '')) : null;
+
+      if (!detectedAmount) {
+        if (transcript.includes('ಮೂರು ಸಾವಿರದ ಐನೂರು') || transcript.includes('3500')) detectedAmount = 3500;
+        else if (transcript.includes('ಮೂರು ಸಾವಿರ') || transcript.includes('3000')) detectedAmount = 3000;
+        else if (transcript.includes('ನಾಲ್ಕು ಸಾವಿರ') || transcript.includes('4000')) detectedAmount = 4000;
+        else if (transcript.includes('ಐದು ಸಾವಿರ') || transcript.includes('5000')) detectedAmount = 5000;
+        else if (transcript.includes('ಎರಡು ಸಾವಿರ') || transcript.includes('2000')) detectedAmount = 2000;
+      }
+
+      handleNegotiateCounteroffer(enquiry, detectedAmount, transcript);
+    };
+
+    recognizer.onerror = (err) => {
+      console.warn('Voice recognition error:', err);
+      handleNegotiateCounteroffer(enquiry);
+    };
+
+    try {
+      recognizer.start();
+    } catch {
+      handleNegotiateCounteroffer(enquiry);
+    }
+  };
+
+  // Mutual Order Confirmation & Production Scheduling
+  const handleConfirmProduction = async (enquiry) => {
+    const defaultDate = new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0];
+    const promptDate = isKn
+      ? `ಉತ್ಪನ್ನ ತಯಾರಿಕೆ ಮತ್ತು ವಿತರಣೆ ದಿನಾಂಕ ದೃಢೀಕರಿಸಿ:\n\nನಿರೀಕ್ಷಿತ ಪೂರ್ಣಗೊಳ್ಳುವ ದಿನಾಂಕ (YYYY-MM-DD ನಮೂದಿಸಿ):`
+      : `Confirm Production & Ready Date:\n\nEnter expected ready date (YYYY-MM-DD):`;
+
+    const readyDate = window.prompt(promptDate, defaultDate);
+    if (!readyDate) return;
+
+    const promptNotes = isKn
+      ? `ಉತ್ಪಾದನಾ ಟಿಪ್ಪಣಿಗಳು (Production Notes):\n\n(ಉದಾ: 'ಸಾಂಪ್ರದಾಯಿಕ ಕೈಯಿಂದ ಮಾಡಿದ ಬಣ್ಣ ಮತ್ತು ಲ್ಯಾಕರ್ ಪೂರ್ಣಗೊಳಿಸುವಿಕೆ ಆರಂಭಿಸಲಾಗಿದೆ')`
+      : `Production Notes:\n\n(e.g., 'Handcrafting started in workshop with premium natural lacquer finish')`;
+
+    const notes = window.prompt(promptNotes, isKn ? 'ಕಾರ್ಯಾಗಾರದಲ್ಲಿ ನುರಿತ ಕುಶಲಕರ್ಮಿಗಳಿಂದ ಉತ್ಪಾದನೆ ಆರಂಭಿಸಲಾಗಿದೆ.' : 'Handcrafting scheduled in workshop with master artisan quality checks.') || '';
+
+    try {
+      setProcessing(true);
+      const agreedTotal = Number(enquiry.counteroffer_amount || enquiry.budget || enquiry.estimate || 400);
+      const qty = Number(enquiry.quantity) || 1;
+
+      // 1. Update enquiry status to confirmed
+      const { error: enqErr } = await supabase
+        .from('enquiries')
+        .update({
+          status: 'confirmed',
+          expected_ready_date: readyDate,
+          production_notes: notes,
+          artisan_confirmed_at: new Date().toISOString()
+        })
+        .eq('id', enquiry.id);
+
+      if (enqErr) throw enqErr;
+
+      // 2. Create confirmed order in orders table
+      let createdOrderId = null;
+      try {
+        const { data: newOrder, error: orderErr } = await supabase
+          .from('orders')
+          .insert({
+            customer_id: enquiry.customer_id,
+            total_amount: agreedTotal,
+            shipping_name: 'Custom Order Buyer',
+            shipping_phone: 'Pending Customer Update',
+            shipping_address: 'Mutual Agreement via Custom Craft Enquiry',
+            shipping_city: 'Bengaluru',
+            shipping_state: 'Karnataka',
+            shipping_pincode: '560001',
+            status: 'confirmed'
+          })
+          .select()
+          .single();
+
+        if (!orderErr && newOrder?.id) {
+          createdOrderId = newOrder.id;
+          await supabase.from('order_items').insert({
+            order_id: newOrder.id,
+            product_id: enquiry.product_id,
+            artisan_id: artisan.id,
+            quantity: qty,
+            unit_price: Number((agreedTotal / qty).toFixed(2)),
+            subtotal: agreedTotal
+          });
+          await supabase.from('enquiries').update({ order_id: newOrder.id }).eq('id', enquiry.id);
+        }
+      } catch (orderCreateErr) {
+        console.warn('Orders creation fallback:', orderCreateErr);
+      }
+
+      // 3. Persist in enquiry_messages
+      try {
+        await supabase.from('enquiry_messages').insert({
+          enquiry_id: enquiry.id,
+          sender_id: profile?.id || user?.id,
+          sender_role: 'artisan',
+          message: `Production Confirmed! Artisan scheduled workshop completion for ${readyDate}. Note: "${notes}"`,
+          message_type: 'production_confirmation',
+          proposed_amount: agreedTotal,
+          unit_price_equivalent: Number((agreedTotal / qty).toFixed(2)),
+          kannada_translation: `ಉತ್ಪಾದನೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ! ನಿರೀಕ್ಷಿತ ದಿನಾಂಕ: ${readyDate}. ಟಿಪ್ಪಣಿ: "${notes}"`
+        });
+      } catch (msgErr) {
+        console.warn('enquiry_messages insert fallback:', msgErr);
+      }
+
+      // 4. Notify customer
+      if (enquiry.customer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: enquiry.customer_id,
+            type: 'enquiry_confirmed',
+            title: 'Custom Order Confirmed! 🔨',
+            message: `Artisan confirmed production for "${enquiry.product_name}". Expected ready date: ${readyDate}.`,
+            reference_id: enquiry.id,
+            reference_type: 'enquiry',
+            is_read: false
+          });
+        } catch {
+          // non-blocking
+        }
+      }
+
+      // 5. Update UI state
+      setMessages(prev => prev.map(m => {
+        if (m.enquiryCard && m.enquiryCard.id === enquiry.id) {
+          return {
+            ...m,
+            enquiryCard: {
+              ...m.enquiryCard,
+              status: 'confirmed',
+              expected_ready_date: readyDate,
+              production_notes: notes,
+              order_id: createdOrderId
+            }
+          };
+        }
+        return m;
+      }));
+
+      addMessage('assistant', isKn
+        ? `🔨 **ಉತ್ಪಾದನೆ ಮತ್ತು ಆರ್ಡರ್ ಯಶಸ್ವಿಯಾಗಿ ದೃಢೀಕರಿಸಲಾಗಿದೆ!**\n\n• ನಿರೀಕ್ಷಿತ ದಿನಾಂಕ: ${readyDate}\n• ಒಟ್ಟು ಮೌಲ್ಯ: ₹${agreedTotal}\n• ಟಿಪ್ಪಣಿ: "${notes}"\n\nಗ್ರಾಹಕರಿಗೆ ದೃಢೀಕರಣ ಸಂದೇಶ ಕಳುಹಿಸಲಾಗಿದೆ.`
+        : `🔨 **Production & Order Confirmed!**\n\n• Expected Ready Date: ${readyDate}\n• Total Agreed: ₹${agreedTotal}\n• Notes: "${notes}"\n\nCustomer notified with production schedule.`
+      );
+    } catch (err) {
+      console.error('Error confirming production:', err);
+      addMessage('assistant', isKn ? "⚠️ ಉತ್ಪಾದನೆ ದೃಢೀಕರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "⚠️ Failed to confirm production.");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -322,6 +669,20 @@ function WhatsAppPlaceholderPage() {
         .eq('id', enquiryId);
 
       if (error) throw error;
+
+      // Add to enquiry_messages
+      try {
+        await supabase.from('enquiry_messages').insert({
+          enquiry_id: enquiryId,
+          sender_id: profile?.id || user?.id,
+          sender_role: 'artisan',
+          message: userReply.trim(),
+          message_type: 'text',
+          kannada_translation: userReply.trim()
+        });
+      } catch (msgErr) {
+        console.warn('enquiry_messages insert fallback:', msgErr);
+      }
 
       setMessages(prev => prev.map(m => {
         if (m.enquiryCard && m.enquiryCard.id === enquiryId) {
@@ -565,8 +926,17 @@ function WhatsAppPlaceholderPage() {
     setWorkflowStep('processing_voice');
 
     try {
+      const nlpStart = performance.now();
       const facts = extractProductFacts(text);
+      const nlpEnd = performance.now();
+
+      const listingStart = performance.now();
       const listing = buildProductListing(text, facts);
+      const listingEnd = performance.now();
+
+      const nlpExtractionMs = Math.max(1, Math.round(nlpEnd - nlpStart));
+      const listingGenerationMs = Math.max(1, Math.round(listingEnd - listingStart));
+      const totalProcessingMs = nlpExtractionMs + listingGenerationMs;
 
       // Match category ID
       const matchedCat = categories.find(c =>
@@ -584,7 +954,13 @@ function WhatsAppPlaceholderPage() {
         category: listing.category || 'Handicrafts',
         category_id: matchedCat?.id || null,
         imageUrl: pendingPhotoPreview,
-        rawTranscript: text
+        rawTranscript: text,
+        latencyStats: {
+          nlpExtractionMs,
+          listingGenerationMs,
+          totalProcessingMs,
+          recordedAt: new Date().toISOString()
+        }
       };
 
       setCurrentDraft(draftObj);
@@ -1225,6 +1601,27 @@ function WhatsAppPlaceholderPage() {
                     <div style={{ fontSize: '0.75rem', color: 'var(--secondary-text)', marginTop: '0.35rem', borderTop: '1px dashed var(--border)', paddingTop: '0.3rem' }}>
                       💡 {isKn ? 'ಬೆಲೆ ತಿದ್ದಲು ಧ್ವನಿಯಲ್ಲಿ ಹೇಳಿ: "ಬೆಲೆ 450 ಮಾಡಿ" ಅಥವಾ ಬಾಕ್ಸ್‌ನಲ್ಲಿ ಟೈಪ್ ಮಾಡಿ.' : 'You can voice-correct: "Change price to 450" or type in the box above.'}
                     </div>
+
+                    {msg.draftCard.latencyStats && (
+                      <div style={{
+                        marginTop: '0.4rem',
+                        padding: '0.25rem 0.45rem',
+                        background: 'rgba(5, 150, 105, 0.08)',
+                        border: '1px solid rgba(5, 150, 105, 0.25)',
+                        borderRadius: '4px',
+                        fontSize: '0.68rem',
+                        color: 'var(--primary-green)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.3rem'
+                      }}>
+                        <span>⚡ {isKn ? 'ಸಂಸ್ಕರಣಾ ಸಮಯ' : 'Latency'}: <strong>{msg.draftCard.latencyStats.totalProcessingMs}ms</strong></span>
+                        <span style={{ fontSize: '0.64rem', color: 'var(--secondary-text)' }}>
+                          NLP: {msg.draftCard.latencyStats.nlpExtractionMs}ms | Gen: {msg.draftCard.latencyStats.listingGenerationMs}ms
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1338,6 +1735,12 @@ function WhatsAppPlaceholderPage() {
                       "{msg.enquiryCard.message}"
                     </p>
 
+                    {msg.enquiryCard.knTranslation && (
+                      <p style={{ margin: '0.2rem 0 0.4rem', color: '#1e3a8a', background: '#eff6ff', padding: '0.45rem', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '0.78rem' }}>
+                        🌐 <strong>{isKn ? 'ಕನ್ನಡ ಅನುವಾದ:' : 'Translation:'}</strong> {msg.enquiryCard.knTranslation}
+                      </p>
+                    )}
+
                     {msg.enquiryCard.reference_image_url && (
                       <div style={{ marginBottom: '0.4rem' }}>
                         <span style={{ fontSize: '0.68rem', color: 'var(--secondary-text)', display: 'block' }}>
@@ -1347,35 +1750,138 @@ function WhatsAppPlaceholderPage() {
                       </div>
                     )}
 
+                    {/* Bulk Negotiation Analysis Breakdown */}
+                    {msg.enquiryCard.estimate && (
+                      <div style={{ marginTop: '0.4rem', padding: '0.45rem 0.6rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.72rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                          <span style={{ color: 'var(--secondary-text)' }}>{isKn ? 'ಪಟ್ಟಿಮಾಡಿದ ಅಂದಾಜು:' : 'Listed Estimate:'}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text)' }}>₹{msg.enquiryCard.estimate} (₹{msg.enquiryCard.unitPrice}/unit)</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                          <span style={{ color: 'var(--secondary-text)' }}>{isKn ? 'ಗ್ರಾಹಕರ ಪ್ರಸ್ತಾಪ:' : 'Customer Offer:'}</span>
+                          <span style={{ fontWeight: 700, color: '#059669' }}>₹{msg.enquiryCard.budget}</span>
+                        </div>
+                        {msg.enquiryCard.diff !== null && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: msg.enquiryCard.diff > 0 ? '#b91c1c' : '#059669', fontWeight: 600 }}>
+                            <span>{isKn ? 'ವ್ಯತ್ಯಾಸ:' : 'Variance:'}</span>
+                            <span>{msg.enquiryCard.diff > 0 ? `-₹${msg.enquiryCard.diff} (${Math.round((msg.enquiryCard.diff / msg.enquiryCard.estimate) * 100)}% below)` : `+₹${Math.abs(msg.enquiryCard.diff)}`}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div style={{ fontSize: '0.72rem', color: 'var(--secondary-text)' }}>
                       {msg.enquiryCard.quantity && <span>{isKn ? 'ಪ್ರಮಾಣ:' : 'Qty:'} <strong>{msg.enquiryCard.quantity}</strong> • </span>}
                       {msg.enquiryCard.budget && <span>{isKn ? 'ಬಜೆಟ್:' : 'Budget:'} <strong style={{ color: '#059669' }}>₹{msg.enquiryCard.budget}</strong> • </span>}
                       {msg.enquiryCard.preferred_delivery_date && <span>📅 {msg.enquiryCard.preferred_delivery_date}</span>}
                     </div>
 
-                    {msg.enquiryCard.artisan_response ? (
-                      <div style={{ marginTop: '0.4rem', padding: '0.4rem 0.6rem', background: '#ecfdf5', borderRadius: '6px', color: '#065f46', fontSize: '0.76rem', border: '1px solid #a7f3d0' }}>
-                        ✓ <strong>{isKn ? 'ನಿಮ್ಮ ಪ್ರತ್ಯುತ್ತರ:' : 'Your Reply:'}</strong> {msg.enquiryCard.artisan_response}
+                    {/* Order Confirmed Banner */}
+                    {msg.enquiryCard.status === 'confirmed' ? (
+                      <div style={{ marginTop: '0.4rem', padding: '0.5rem 0.65rem', background: '#ecfdf5', borderRadius: '6px', color: '#065f46', fontSize: '0.76rem', border: '1px solid #a7f3d0' }}>
+                        ✓ <strong>{isKn ? 'ಉತ್ಪಾದನೆ ಮತ್ತು ಆರ್ಡರ್ ದೃಢೀಕರಿಸಲಾಗಿದೆ!' : 'Production & Order Confirmed!'}</strong>
+                        {msg.enquiryCard.expected_ready_date && (
+                          <div style={{ marginTop: '2px' }}>📅 {isKn ? 'ನಿರೀಕ್ಷಿತ ದಿನಾಂಕ:' : 'Ready Date:'} <strong>{msg.enquiryCard.expected_ready_date}</strong></div>
+                        )}
+                        {msg.enquiryCard.production_notes && (
+                          <div style={{ fontStyle: 'italic', marginTop: '2px' }}>"{msg.enquiryCard.production_notes}"</div>
+                        )}
                       </div>
-                    ) : (
-                      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.4rem' }}>
+                    ) : msg.enquiryCard.status === 'offer_accepted' ? (
+                      <div style={{ marginTop: '0.4rem', padding: '0.55rem 0.65rem', background: '#fef3c7', borderRadius: '6px', color: '#92400e', fontSize: '0.76rem', border: '1px solid #fde68a' }}>
+                        🎉 <strong>{isKn ? 'ಗ್ರಾಹಕರು ಪ್ರಸ್ತಾಪವನ್ನು ಒಪ್ಪಿಕೊಂಡಿದ್ದಾರೆ!' : 'Customer Accepted Offer!'}</strong>
+                        <div style={{ fontSize: '0.72rem', margin: '3px 0 6px' }}>
+                          {isKn ? 'ಕಾರ್ಯಾಗಾರ ವೇಳಾಪಟ್ಟಿ ಪರಿಶೀಲಿಸಿ ಉತ್ಪಾದನೆ ಮತ್ತು ದಿನಾಂಕ ದೃಢೀಕರಿಸಿ:' : 'Review workshop capacity and confirm production schedule:'}
+                        </div>
                         <button
                           type="button"
-                          onClick={() => handleReplyToEnquiry(msg.enquiryCard.id)}
+                          onClick={() => handleConfirmProduction(msg.enquiryCard)}
                           style={{
-                            padding: '0.35rem 0.65rem',
-                            background: '#2563EB',
+                            padding: '0.4rem 0.75rem',
+                            background: '#059669',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
                             fontSize: '0.75rem',
-                            fontWeight: 600,
+                            fontWeight: 700,
                             cursor: 'pointer'
                           }}
                         >
-                          ✍️ {isKn ? 'ಗ್ರಾಹಕರಿಗೆ ಉತ್ತರಿಸಿ' : 'Reply to Customer'}
+                          🔨 {isKn ? 'ಉತ್ಪಾದನೆ ಮತ್ತು ದಿನಾಂಕ ದೃಢೀಕರಿಸಿ' : 'Confirm Production & Ready Date'}
                         </button>
                       </div>
+                    ) : (
+                      <>
+                        {msg.enquiryCard.counteroffer_amount && (
+                          <div style={{ marginTop: '0.4rem', padding: '0.4rem 0.6rem', background: '#f5f3ff', borderRadius: '6px', color: '#5b21b6', fontSize: '0.76rem', border: '1px solid #ddd6fe' }}>
+                            ⏳ <strong>{isKn ? 'ಪ್ರತಿ-ಕೊಡುಗೆ ₹' + msg.enquiryCard.counteroffer_amount + ' ಕಳುಹಿಸಲಾಗಿದೆ' : 'Counteroffer ₹' + msg.enquiryCard.counteroffer_amount + ' sent'}</strong>
+                            <div style={{ fontSize: '0.68rem', color: '#6d28d9', marginTop: '2px' }}>
+                              {isKn ? 'ಗ್ರಾಹಕರ ಅನುಮೋದನೆಗಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ.' : 'Awaiting customer response.'}
+                            </div>
+                          </div>
+                        )}
+
+                        {msg.enquiryCard.artisan_response && !msg.enquiryCard.counteroffer_amount && (
+                          <div style={{ marginTop: '0.4rem', padding: '0.4rem 0.6rem', background: '#ecfdf5', borderRadius: '6px', color: '#065f46', fontSize: '0.76rem', border: '1px solid #a7f3d0' }}>
+                            ✓ <strong>{isKn ? 'ನಿಮ್ಮ ಪ್ರತ್ಯುತ್ತರ:' : 'Your Reply:'}</strong> {msg.enquiryCard.artisan_response}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleReplyToEnquiry(msg.enquiryCard.id)}
+                            style={{
+                              padding: '0.35rem 0.65rem',
+                              background: '#2563EB',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ✍️ {isKn ? 'ಗ್ರಾಹಕರಿಗೆ ಉತ್ತರಿಸಿ' : 'Reply'}
+                          </button>
+                          {msg.enquiryCard.quantity && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleNegotiateCounteroffer(msg.enquiryCard)}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  background: '#059669',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                🤝 {isKn ? 'ಪ್ರತಿ-ಕೊಡುಗೆ' : 'Counteroffer'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVoiceCounteroffer(msg.enquiryCard)}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  background: '#7C3AED',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                🎙️ {isKn ? 'ಧ್ವನಿ ಮೂಲಕ' : 'Voice Offer'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}

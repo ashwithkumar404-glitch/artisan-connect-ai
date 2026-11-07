@@ -9,10 +9,38 @@ CREATE TABLE IF NOT EXISTS public.enquiries (
     artisan_id UUID NOT NULL REFERENCES public.artisans(id) ON DELETE CASCADE,
     message TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
+    quantity INTEGER CHECK (quantity > 0),
+    preferred_delivery_date DATE,
+    budget NUMERIC(12,2) CHECK (budget >= 0),
+    reference_image_url TEXT,
+    artisan_response TEXT,
+    counteroffer_amount NUMERIC(12,2) CHECK (counteroffer_amount >= 0),
+    expected_ready_date DATE,
+    customer_accepted_at TIMESTAMPTZ,
+    artisan_confirmed_at TIMESTAMPTZ,
+    production_notes TEXT,
+    order_id UUID REFERENCES public.orders(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    CONSTRAINT chk_enquiry_status CHECK (status IN ('pending', 'read', 'replied', 'closed'))
+    CONSTRAINT chk_enquiry_status CHECK (
+        status IN (
+            'pending',
+            'submitted',
+            'under_review',
+            'sent_to_artisan',
+            'negotiation_ongoing',
+            'offer_awaiting_response',
+            'responded',
+            'offer_accepted',
+            'confirmed',
+            'closed',
+            'rejected',
+            'cancelled',
+            'read',
+            'replied'
+        )
+    )
 );
 
 -- 2. Create performance indexes
@@ -49,19 +77,92 @@ CREATE POLICY insert_enquiries ON public.enquiries
         artisan_id = (SELECT artisan_id FROM public.products WHERE id = product_id)
     );
 
--- Policy: Artisans can update enquiries addressed to them (e.g. changing status to 'read' or 'replied')
+-- Policy: Customers and Artisans can update enquiries they participate in
 DROP POLICY IF EXISTS update_enquiries ON public.enquiries;
 CREATE POLICY update_enquiries ON public.enquiries
     FOR UPDATE
     TO authenticated
     USING (
+        customer_id = auth.uid()
+        OR
         artisan_id IN (
             SELECT id FROM public.artisans WHERE profile_id = auth.uid()
         )
     )
     WITH CHECK (
+        customer_id = auth.uid()
+        OR
         artisan_id IN (
             SELECT id FROM public.artisans WHERE profile_id = auth.uid()
+        )
+    );
+
+-- 4b. Table and RLS for Multi-Message Negotiation Thread
+CREATE TABLE IF NOT EXISTS public.enquiry_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    enquiry_id UUID NOT NULL REFERENCES public.enquiries(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    sender_role TEXT NOT NULL CHECK (sender_role IN ('customer', 'artisan', 'system')),
+    message TEXT NOT NULL,
+    message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'offer', 'counteroffer', 'acceptance', 'production_confirmation', 'status_update')),
+    proposed_amount NUMERIC(12,2) CHECK (proposed_amount >= 0),
+    unit_price_equivalent NUMERIC(12,2) CHECK (unit_price_equivalent >= 0),
+    kannada_translation TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_enquiry_messages_enquiry_id ON public.enquiry_messages(enquiry_id);
+CREATE INDEX IF NOT EXISTS idx_enquiry_messages_created_at ON public.enquiry_messages(created_at);
+
+ALTER TABLE public.enquiry_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS select_enquiry_messages ON public.enquiry_messages;
+CREATE POLICY select_enquiry_messages ON public.enquiry_messages
+    FOR SELECT
+    TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.enquiries e
+            WHERE e.id = enquiry_id
+            AND (
+                e.customer_id = auth.uid()
+                OR
+                e.artisan_id IN (SELECT id FROM public.artisans WHERE profile_id = auth.uid())
+            )
+        )
+    );
+
+DROP POLICY IF EXISTS insert_enquiry_messages ON public.enquiry_messages;
+CREATE POLICY insert_enquiry_messages ON public.enquiry_messages
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        sender_id = auth.uid()
+        AND
+        EXISTS (
+            SELECT 1 FROM public.enquiries e
+            WHERE e.id = enquiry_id
+            AND (
+                e.customer_id = auth.uid()
+                OR
+                e.artisan_id IN (SELECT id FROM public.artisans WHERE profile_id = auth.uid())
+            )
+        )
+    );
+
+-- Policy: Allow artisans to generate orders from accepted custom enquiries
+DROP POLICY IF EXISTS insert_orders ON public.orders;
+CREATE POLICY insert_orders ON public.orders
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        customer_id = auth.uid()
+        OR
+        EXISTS (
+            SELECT 1 FROM public.enquiries e
+            WHERE e.customer_id = orders.customer_id
+            AND e.artisan_id IN (SELECT id FROM public.artisans WHERE profile_id = auth.uid())
+            AND e.status IN ('offer_accepted', 'confirmed')
         )
     );
 

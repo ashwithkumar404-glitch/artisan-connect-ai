@@ -105,6 +105,9 @@ describe('Master Integration & Repair Verification Suite', () => {
     const enginePath = path.join(rootDir, 'src/lib/kannadaProductEngine.js');
     const engine = await import(pathToFileURL(enginePath).href);
 
+    // Warm-up to trigger JIT optimization and regex compilation
+    engine.extractProductFacts("warmup");
+
     const testTranscript = "ನಾನು ನೈಸರ್ಗಿಕ ಜೇಡಿಮಣ್ಣಿನಿಂದ ಕೈಯಿಂದ ಮಾಡಿದ ಸಾಂಪ್ರದಾಯಿಕ ನೀರು ಕುಡಿಯುವ ಮಡಕೆ ತಯಾರಿಸಿದ್ದೇನೆ. ಇದರ ಬೆಲೆ 350 ರೂಪಾಯಿ. ನನ್ನ ಬಳಿ 25 ಮಡಕೆಗಳು ದಾಸ್ತಾನು ಇವೆ.";
 
     const startExtract = performance.now();
