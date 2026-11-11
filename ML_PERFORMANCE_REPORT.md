@@ -102,3 +102,4 @@ When evaluating these results for academic or production review, several essenti
 4. **Model Deployment Readiness:**
    - The serialized models (`ml/model/best_classifier.pkl` and `ml/model/best_regressor.pkl`) are stored for offline evaluation and experimentation.
    - The models should not be considered fully production-ready until trained and evaluated against hundreds of field-verified artisan records.
+

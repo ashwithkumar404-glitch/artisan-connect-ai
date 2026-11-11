@@ -80,3 +80,4 @@ The following roadmap items represent planned future enhancements:
   - Configure Vitest or Jest in `frontend/` to provide automated component testing parity with `artisan-assistant/`.
 - **Live Payment Gateway Integration:**
   - Integrate production UPI/payment gateway rails (e.g. Razorpay or Bharat Interface for Money) for real-time payment settlement upon order confirmation.
+

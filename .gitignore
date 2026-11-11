@@ -39,4 +39,5 @@ scratch/
 # ML local data exports & models (local only)
 ml/data/*
 !ml/data/labeled_products_template.csv
+!ml/data/verified_benchmark_dataset.csv
 ml/model/*.pkl

@@ -98,100 +98,153 @@ Artisan Connect AI addresses these challenges with two complementary application
 
 ---
 
-## ⚙️ Installation & Setup
+## 🤝 How a New Team Member Can Set Up Artisan Connect AI
 
-### Prerequisites
-- **Node.js:** v18.x or v20.x recommended
+Follow this step-by-step guide to clone, configure, run, and test the entire project locally.
+
+### 1. Prerequisites
+Ensure the following tools are installed on your workstation:
+- **Node.js:** v18.x or v20.x LTS (compatible with React 19 and Vite 8)
 - **npm:** v9.x or v10.x
-- **Python:** v3.10+ (for ML scripts in `ml/`)
+- **Python:** v3.10, v3.11, v3.12, or v3.14 (with `pip` and `venv`)
 - **Git**
 
-### 1. Clone Repository & Install Dependencies
+---
+
+### 2. Clone the Repository
 ```bash
 git clone https://github.com/ashwithkumar404-glitch/artisan-connect-ai.git
 cd artisan-connect-ai
+```
 
-# Install root dependencies
+---
+
+### 3. Install Node.js Dependencies
+The project is organized into two frontend applications sharing a common root workspace:
+
+```bash
+# 1. Install root workspace scripts
 npm install
 
-# Install Artisan Assistant dependencies
+# 2. Install Artisan Assistant dependencies
 npm install --prefix artisan-assistant
 
-# Install Customer Marketplace dependencies
+# 3. Install Customer Marketplace dependencies
 npm install --prefix frontend
 ```
 
-### 2. Environment Configuration
-Copy `.env.example` in both applications and populate your Supabase URL and Anon Key:
+---
+
+### 4. Setup Python Virtual Environment for ML
+The machine learning suite (`ml/`) runs in an isolated Python virtual environment:
 
 ```bash
-# In artisan-assistant/.env.local:
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_MARKETPLACE_URL=http://localhost:5173
+# 1. Create a virtual environment in the project root
+python -m venv .venv
 
-# In frontend/.env.local:
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+# 2. Activate the virtual environment:
+# On Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+# On macOS / Linux:
+source .venv/bin/activate
+
+# 3. Install verified machine learning dependencies
+pip install -r ml/requirements.txt
 ```
-
-> **Security Note:** Never commit `.env` or `.env.local` files, service-role keys, or private tokens to Git.
 
 ---
 
-## 🚀 Running the Applications
+### 5. Configure Environment Variables
+Environment variable templates are provided at `.env.example` in the root, `artisan-assistant/`, and `frontend/`:
 
-You can start both applications independently or run both in separate terminals:
+1. **Artisan Assistant (`artisan-assistant/.env.local`):**
+   ```bash
+   # Copy template
+   cp artisan-assistant/.env.example artisan-assistant/.env.local
+   # (On Windows PowerShell: copy artisan-assistant\.env.example artisan-assistant\.env.local)
+   ```
+   Populate with:
+   ```env
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-or-anon-key
+   VITE_MARKETPLACE_URL=http://localhost:5173
+   ```
+
+2. **Customer Marketplace (`frontend/.env.local`):**
+   ```bash
+   # Copy template
+   cp frontend/.env.example frontend/.env.local
+   # (On Windows PowerShell: copy frontend\.env.example frontend\.env.local)
+   ```
+   Populate with:
+   ```env
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-or-anon-key
+   ```
+
+> ⚠️ **Security Warning:** Never commit `.env` or `.env.local` files, service-role keys, or secrets to Git. Only `.env.example` templates should be committed.
+
+---
+
+### 6. Database Schema & Demo Data Setup (Supabase)
+All persistent tables, RLS policies, and triggers are located in `supabase/migrations/`:
+- If linking to a local Supabase instance or cloud project:
+  - Run migrations in chronological order: `20261001000000_initial_baseline.sql` through `20261106000000_order_dispatch_and_demo_support.sql`.
+- To seed realistic, isolated demo data flagged with `is_demo = true`:
+  ```bash
+  node scripts/seed_demo_data.js --sql
+  ```
+  *(Or execute `supabase/seed_demo_data.sql` directly in your Supabase SQL editor).*
+
+---
+
+### 7. Running the Applications Locally
+Both applications run concurrently on dedicated Vite ports:
 
 ```bash
-# Terminal 1: Run Customer Marketplace (Port 5173)
+# Terminal 1 — Customer Marketplace (Port 5173):
 npm run dev:marketplace
-# URL: http://localhost:5173
+# Opens: http://localhost:5173
 
-# Terminal 2: Run Artisan Assistant (Port 5174)
+# Terminal 2 — Artisan Assistant (Port 5174):
 npm run dev:artisan
-# URL: http://localhost:5174
+# Opens: http://localhost:5174
 ```
+
+| Application | Port | Role | Target User |
+| :--- | :--- | :--- | :--- |
+| **Customer Marketplace** | `5173` | Public craft discovery, bulk enquiries, reviews | Buyers & Collectors |
+| **Artisan Assistant** | `5174` | Mobile workshop hub, voice listing, negotiation, order dispatch | Rural & Traditional Artisans |
 
 ---
 
-## 🧪 Running Automated Tests & Production Builds
+### 8. Running Automated Test Suites & Builds
+Ensure all tests pass before making new commits:
 
-### 1. Artisan Assistant Tests (Node Test Runner)
 ```bash
+# 1. Artisan Assistant Test Suite (124 tests across 15 test files):
 npm test --prefix artisan-assistant
-```
-*Current result: 124 passed across 15 test suites.*
 
-### 2. Machine Learning Tests (Pytest)
-```bash
+# 2. Machine Learning Test Suite (34 tests across 4 suites):
 cd ml
 ..\.venv\Scripts\python.exe -m pytest tests -v
-```
-*Current result: 34 passed across 4 test suites.*
+# (or with venv active: pytest tests -v)
 
-### 3. Production Builds
-```bash
-# Build Artisan Assistant
-npm run build:artisan
-
-# Build Customer Marketplace
-npm run build:marketplace
-```
-
-### 4. Running ML Model Benchmarking
-```bash
+# 3. ML Model Benchmarking (trains baseline and advanced models, exports metrics):
 cd ml
 ..\.venv\Scripts\python.exe benchmark_models.py
+
+# 4. Production Bundle Builds (verifies both apps build without syntax or Vite errors):
+npm run build
 ```
-*Evaluates 5 classification models and 4 regression models, outputs `ml/evaluation_report.json`, and serializes the best models to `ml/model/`.*
 
 ---
 
-## 📊 Current Implementation Status
+## 📊 Project Documentation & Audit Reports
 
-For a full breakdown of completed features, limitations, and future work, see:
-- [`PROJECT_DOCUMENTATION.md`](./PROJECT_DOCUMENTATION.md) — Comprehensive functional and technical workflow documentation.
-- [`ML_PERFORMANCE_REPORT.md`](./ML_PERFORMANCE_REPORT.md) — Genuine machine learning benchmark metrics and experimental disclaimers.
-- [`TESTING_AND_VALIDATION.md`](./TESTING_AND_VALIDATION.md) — Verified test results, bundle diagnostics, and known limitations.
+For detailed deep-dives into application workflows, architecture, and evaluations:
+- [`ARTISAN_ASSISTANT_AUDIT.md`](./ARTISAN_ASSISTANT_AUDIT.md) — Comprehensive technical audit of the Artisan Assistant, voice engine, and WhatsApp assistant.
+- [`PROJECT_DOCUMENTATION.md`](./PROJECT_DOCUMENTATION.md) — Complete end-to-end architecture, database schema, and workflow specification.
+- [`ML_PERFORMANCE_REPORT.md`](./ML_PERFORMANCE_REPORT.md) — Genuine machine learning benchmarks and model evaluations.
+- [`TESTING_AND_VALIDATION.md`](./TESTING_AND_VALIDATION.md) — Test execution results, bundle diagnostics, and known limitations.
 - [`PROJECT_STATUS.md`](./PROJECT_STATUS.md) — Current implementation milestones, items needing validation, and roadmap.

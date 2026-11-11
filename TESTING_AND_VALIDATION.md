@@ -97,3 +97,4 @@ Both builds emit Vite chunk-size notices:
 - `frontend`: ~853.75 kB minified (~211.76 kB gzipped).
 
 > **Important Assessment:** These bundle sizes trigger standard Vite informational warnings (`chunkSizeWarningLimit: 500 kB`). They are **performance optimization notices, not build or runtime errors**. The larger chunk size is driven by bundling the Supabase client library, React DOM, and localized linguistic dictionaries into single bundles. For future production releases, route-based dynamic `import()` code-splitting can be configured to optimize initial mobile loading times.
+

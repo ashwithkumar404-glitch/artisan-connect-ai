@@ -221,3 +221,4 @@ All persistent records are managed in a shared **Supabase PostgreSQL** instance 
   - Artisans can read/update only their own products, view enquiries directed to them, manage their own orders, and view product reviews.
   - `enquiry_messages` access is restricted strictly to the participating customer (`auth.uid() = customer_id`) and participating artisan (`auth.uid() = artisan_user_id`).
   - No service-role keys are exposed in client-side bundles.
+
