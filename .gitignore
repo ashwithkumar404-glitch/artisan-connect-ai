@@ -40,4 +40,5 @@ scratch/
 ml/data/*
 !ml/data/labeled_products_template.csv
 !ml/data/verified_benchmark_dataset.csv
+!ml/data/human_review_checklist.csv
 ml/model/*.pkl
