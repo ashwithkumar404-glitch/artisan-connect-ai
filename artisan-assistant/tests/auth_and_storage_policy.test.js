@@ -25,9 +25,14 @@ function sha256Sync(str) {
   return crypto.createHash('sha256').update(str).digest('hex');
 }
 
+// Normalizes CRLF line endings to LF to prevent cross-platform assertion failures on Windows
+function readNormalized(filePath) {
+  return fs.readFileSync(filePath, 'utf-8').replace(/\r\n/g, '\n');
+}
+
 test('1. Valid OTP and genuine Supabase Auth session establishment', () => {
-  const loginContent = fs.readFileSync(loginPagePath, 'utf-8');
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
+  const loginContent = readNormalized(loginPagePath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
 
   // Unified artisanIdCode contract
   assert.ok(loginContent.includes('artisanIdCode: cleanId'), "LoginPage must send 'artisanIdCode'");
@@ -64,8 +69,8 @@ test('1. Valid OTP and genuine Supabase Auth session establishment', () => {
 });
 
 test('2. Incorrect OTP validation and attempt tracking', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Simulating hash verification
   const secretCode = 'KA-ART-1001';
@@ -102,8 +107,8 @@ test('2. Incorrect OTP validation and attempt tracking', () => {
 });
 
 test('3. Expired OTP challenge rejection', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Edge function checks expired status from atomic RPC
   assert.ok(
@@ -129,8 +134,8 @@ test('3. Expired OTP challenge rejection', () => {
 });
 
 test('4. OTP single-use and replay prevention (no reuse)', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Edge function checks already_verified status from atomic RPC
   assert.ok(
@@ -152,8 +157,8 @@ test('4. OTP single-use and replay prevention (no reuse)', () => {
 });
 
 test('5. Excessive verification attempts lockout and request rate limiting', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Verification attempt lockout: max_attempts exceeded
   assert.ok(
@@ -187,8 +192,8 @@ test('5. Excessive verification attempts lockout and request rate limiting', () 
 });
 
 test('6. Missing or invalid artisan ID handling', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
-  const loginContent = fs.readFileSync(loginPagePath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
+  const loginContent = readNormalized(loginPagePath, 'utf-8');
 
   // Client validation
   assert.ok(
@@ -214,8 +219,8 @@ test('6. Missing or invalid artisan ID handling', () => {
 });
 
 test('7. Cross-artisan access controls (profiles, products, storage)', () => {
-  const migrationContent = fs.readFileSync(migrationPath, 'utf-8');
-  const setupContent = fs.readFileSync(path.resolve(__dirname, '../../frontend/supabase_setup.sql'), 'utf-8');
+  const migrationContent = readNormalized(migrationPath, 'utf-8');
+  const setupContent = readNormalized(path.resolve(__dirname, '../../frontend/supabase_setup.sql'), 'utf-8');
 
   // Profile RLS isolates user records by auth.uid()
   assert.ok(
@@ -237,7 +242,7 @@ test('7. Cross-artisan access controls (profiles, products, storage)', () => {
 });
 
 test('8. Unauthenticated product creation and unauthorized product updates', () => {
-  const migrationContent = fs.readFileSync(migrationPath, 'utf-8');
+  const migrationContent = readNormalized(migrationPath, 'utf-8');
 
   // Insert policy restricted to authenticated role
   assert.ok(
@@ -259,7 +264,7 @@ test('8. Unauthenticated product creation and unauthorized product updates', () 
 });
 
 test('9. Development OTP disabled in production configuration', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
 
   // Environment detection must strictly identify production and fail closed
   assert.ok(
@@ -289,7 +294,7 @@ test('9. Development OTP disabled in production configuration', () => {
 });
 
 test('10. OTP delivery/provider failure with honest user-facing error', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
 
   // Check Twilio error handling
   assert.ok(
@@ -319,7 +324,7 @@ test('10. OTP delivery/provider failure with honest user-facing error', () => {
 });
 
 test('11. Existing voice transcription, product generation, image upload, and save workflow remaining functional', () => {
-  const homeContent = fs.readFileSync(homePagePath, 'utf-8');
+  const homeContent = readNormalized(homePagePath, 'utf-8');
 
   // 1. Voice transcription remains intact
   assert.ok(homeContent.includes("startVoiceRecording"), "Voice recording must remain functional in HomePage");
@@ -386,7 +391,7 @@ test('12. Strict fail-closed environment evaluation across conflicting ENVIRONME
 });
 
 test('13. OTP verification enforces mandatory challengeId and validates active registry record', () => {
-  const edgeContent = fs.readFileSync(edgeFunctionPath, 'utf-8');
+  const edgeContent = readNormalized(edgeFunctionPath, 'utf-8');
 
   // Must reject verify request if challengeId is missing
   assert.ok(
@@ -412,7 +417,7 @@ test('13. OTP verification enforces mandatory challengeId and validates active r
 });
 
 test('14. Atomic stored procedures permissions and search_path hardening', () => {
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Functions declare strict search_path = public
   assert.ok(
@@ -448,8 +453,8 @@ test('14. Atomic stored procedures permissions and search_path hardening', () =>
 });
 
 test('15. Storage RLS policies for artisan-verification, review-photos, and product-images', () => {
-  const baselineContent = fs.readFileSync(baselineMigrationPath, 'utf-8');
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const baselineContent = readNormalized(baselineMigrationPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Verification bucket is private, requires UUID format check matching profile's artisan
   assert.ok(
@@ -479,7 +484,7 @@ test('15. Storage RLS policies for artisan-verification, review-photos, and prod
 });
 
 test('16. Profile role protection triggers prevent self-escalation on insert and update', () => {
-  const concurrencyContent = fs.readFileSync(concurrencyMigrationPath, 'utf-8');
+  const concurrencyContent = readNormalized(concurrencyMigrationPath, 'utf-8');
 
   // Trigger on insert blocks self-assigned admin role
   assert.ok(
