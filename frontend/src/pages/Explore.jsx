@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../lib/CartContext';
@@ -29,14 +29,50 @@ export default function Explore() {
     'Other Handicrafts'
   ];
 
-  // Sync state with URL params
+  // Sync state with URL params (e.g., when navigating back/forward or arriving from Home)
   useEffect(() => {
-    setSearchTerm(searchParams.get('search') || '');
-    setSelectedCategory(searchParams.get('category') || 'All');
-    setSortBy(searchParams.get('sort') || 'newest');
+    const urlSearch = searchParams.get('search') || '';
+    const urlCategory = searchParams.get('category') || 'All';
+    const urlSort = searchParams.get('sort') || 'newest';
+
+    setSearchTerm(urlSearch);
+    setSelectedCategory(urlCategory);
+    setSortBy(urlSort);
   }, [searchParams]);
 
-  // Fetch published products matching active filters from Supabase
+  // Debounce search URL synchronization by 300ms using replace: true to protect browser history
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    // Skip debounce on the very first mount since state was already initialized from URL
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSearchParams((prevParams) => {
+        const next = new URLSearchParams(prevParams);
+        const currentParam = next.get('search') || '';
+        const trimmed = searchTerm.trim();
+
+        if (trimmed === currentParam) {
+          return prevParams; // No change needed
+        }
+
+        if (trimmed) {
+          next.set('search', trimmed);
+        } else {
+          next.delete('search');
+        }
+        return next;
+      }, { replace: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, setSearchParams]);
+
+  // Fetch published products matching active category and sorting from Supabase
+  // Note: searchTerm is intentionally excluded from the dependency array because text search is performed locally
   useEffect(() => {
     let active = true;
 
@@ -68,6 +104,7 @@ export default function Explore() {
             id,
             business_name,
             location,
+            specialization,
             verification_status,
             profiles (
               full_name
@@ -121,35 +158,42 @@ export default function Explore() {
     return () => {
       active = false;
     };
-  }, [searchTerm, selectedCategory, sortBy]);
+  }, [selectedCategory, sortBy]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    const newParams = new URLSearchParams(searchParams);
-    if (e.target.value) {
-      newParams.set('search', e.target.value);
-    } else {
-      newParams.delete('search');
-    }
-    setSearchParams(newParams);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setSearchParams((prevParams) => {
+      const next = new URLSearchParams(prevParams);
+      next.delete('search');
+      return next;
+    }, { replace: true });
   };
 
   const handleCategorySelect = (category) => {
     setSelectedCategory(category);
-    const newParams = new URLSearchParams(searchParams);
-    if (category !== 'All') {
-      newParams.set('category', category);
-    } else {
-      newParams.delete('category');
-    }
-    setSearchParams(newParams);
+    setSearchParams((prevParams) => {
+      const next = new URLSearchParams(prevParams);
+      if (category !== 'All') {
+        next.set('category', category);
+      } else {
+        next.delete('category');
+      }
+      return next;
+    });
   };
 
   const handleSortChange = (e) => {
-    setSortBy(e.target.value);
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('sort', e.target.value);
-    setSearchParams(newParams);
+    const newSort = e.target.value;
+    setSortBy(newSort);
+    setSearchParams((prevParams) => {
+      const next = new URLSearchParams(prevParams);
+      next.set('sort', newSort);
+      return next;
+    });
   };
 
   const handleAddToCart = (product, e) => {
@@ -162,7 +206,7 @@ export default function Explore() {
     addToCart(product);
   };
 
-  // Local search filter supporting name, description, artisan, location, craft, category
+  // Local search filter supporting name, description, artisan, location, craft specialization, category
   const filteredProducts = products.filter((product) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
@@ -170,16 +214,12 @@ export default function Explore() {
     const nameMatch = product.name?.toLowerCase().includes(term);
     const descMatch = product.description?.toLowerCase().includes(term);
     const categoryMatch = product.categories?.name?.toLowerCase().includes(term);
-    const artisanName = (
-      product.artisans?.business_name || 
-      product.artisans?.profiles?.full_name || 
-      ''
-    ).toLowerCase();
-    const artisanMatch = artisanName.includes(term);
+    const businessMatch = product.artisans?.business_name?.toLowerCase().includes(term);
+    const artisanPersonMatch = product.artisans?.profiles?.full_name?.toLowerCase().includes(term);
     const locationMatch = product.artisans?.location?.toLowerCase().includes(term);
     const specMatch = product.artisans?.specialization?.toLowerCase().includes(term);
 
-    return nameMatch || descMatch || categoryMatch || artisanMatch || locationMatch || specMatch;
+    return nameMatch || descMatch || categoryMatch || businessMatch || artisanPersonMatch || locationMatch || specMatch;
   });
 
   return (
@@ -218,8 +258,22 @@ export default function Explore() {
                 placeholder="Search by product name, category, location, or artisan shop..."
                 value={searchTerm}
                 onChange={handleSearchChange}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-300 rounded focus:ring-2 focus:ring-gov-navy focus:bg-white text-sm transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-300 rounded focus:ring-2 focus:ring-gov-navy focus:bg-white text-sm transition-all"
+                aria-label="Search products"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <span className="text-sm font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-full w-5 h-5 flex items-center justify-center">
+                    ✕
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
