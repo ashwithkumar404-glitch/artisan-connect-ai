@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../lib/CartContext';
@@ -9,6 +9,13 @@ export default function Explore() {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'All');
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'newest');
+
+  // Phase 2 Filter States
+  const [minPrice, setMinPrice] = useState(searchParams.get('minPrice') || '');
+  const [maxPrice, setMaxPrice] = useState(searchParams.get('maxPrice') || '');
+  const [inStockOnly, setInStockOnly] = useState(searchParams.get('inStock') === 'true');
+  const [minRating, setMinRating] = useState(Number(searchParams.get('rating')) || 0);
+  const [selectedLocation, setSelectedLocation] = useState(searchParams.get('location') || 'All');
 
   const { addToCart } = useCart();
   const { user } = useAuth();
@@ -29,14 +36,68 @@ export default function Explore() {
     'Other Handicrafts'
   ];
 
-  // Sync state with URL params
+  const priceBrackets = [
+    { label: 'All Prices', min: '', max: '' },
+    { label: 'Under ₹500', min: '', max: '500' },
+    { label: '₹500 - ₹1,500', min: '500', max: '1500' },
+    { label: '₹1,500 - ₹3,000', min: '1500', max: '3000' },
+    { label: 'Above ₹3,000', min: '3000', max: '' },
+  ];
+
+  // Sync state with URL params (e.g., when navigating back/forward or arriving from Home)
   useEffect(() => {
-    setSearchTerm(searchParams.get('search') || '');
-    setSelectedCategory(searchParams.get('category') || 'All');
-    setSortBy(searchParams.get('sort') || 'newest');
+    const urlSearch = searchParams.get('search') || '';
+    const urlCategory = searchParams.get('category') || 'All';
+    const urlSort = searchParams.get('sort') || 'newest';
+    const urlMinPrice = searchParams.get('minPrice') || '';
+    const urlMaxPrice = searchParams.get('maxPrice') || '';
+    const urlInStock = searchParams.get('inStock') === 'true';
+    const urlRating = Number(searchParams.get('rating')) || 0;
+    const urlLocation = searchParams.get('location') || 'All';
+
+    setSearchTerm(urlSearch);
+    setSelectedCategory(urlCategory);
+    setSortBy(urlSort);
+    setMinPrice(urlMinPrice);
+    setMaxPrice(urlMaxPrice);
+    setInStockOnly(urlInStock);
+    setMinRating(urlRating);
+    setSelectedLocation(urlLocation);
   }, [searchParams]);
 
-  // Fetch published products matching active filters from Supabase
+  // Debounce search URL synchronization by 300ms using replace: true to protect browser history
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    // Skip debounce on the very first mount since state was already initialized from URL
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSearchParams((prevParams) => {
+        const next = new URLSearchParams(prevParams);
+        const currentParam = next.get('search') || '';
+        const trimmed = searchTerm.trim();
+
+        if (trimmed === currentParam) {
+          return prevParams; // No change needed
+        }
+
+        if (trimmed) {
+          next.set('search', trimmed);
+        } else {
+          next.delete('search');
+        }
+        return next;
+      }, { replace: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, setSearchParams]);
+
+  // Fetch published products matching active category and sorting from Supabase
+  // Note: Local filter dimensions (search, price, stock, rating, location) are evaluated in-memory
   useEffect(() => {
     let active = true;
 
@@ -68,6 +129,7 @@ export default function Explore() {
             id,
             business_name,
             location,
+            specialization,
             verification_status,
             profiles (
               full_name
@@ -121,35 +183,119 @@ export default function Explore() {
     return () => {
       active = false;
     };
-  }, [searchTerm, selectedCategory, sortBy]);
+  }, [selectedCategory, sortBy]);
+
+  // Derive unique available locations from loaded products
+  const availableLocations = useMemo(() => {
+    const locSet = new Set();
+    products.forEach((p) => {
+      const loc = p.artisans?.location?.trim();
+      if (loc) locSet.add(loc);
+    });
+    return Array.from(locSet).sort();
+  }, [products]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    const newParams = new URLSearchParams(searchParams);
-    if (e.target.value) {
-      newParams.set('search', e.target.value);
-    } else {
-      newParams.delete('search');
-    }
-    setSearchParams(newParams);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setSearchParams((prevParams) => {
+      const next = new URLSearchParams(prevParams);
+      next.delete('search');
+      return next;
+    }, { replace: true });
   };
 
   const handleCategorySelect = (category) => {
     setSelectedCategory(category);
-    const newParams = new URLSearchParams(searchParams);
-    if (category !== 'All') {
-      newParams.set('category', category);
-    } else {
-      newParams.delete('category');
-    }
-    setSearchParams(newParams);
+    setSearchParams((prevParams) => {
+      const next = new URLSearchParams(prevParams);
+      if (category !== 'All') {
+        next.set('category', category);
+      } else {
+        next.delete('category');
+      }
+      return next;
+    });
   };
 
   const handleSortChange = (e) => {
-    setSortBy(e.target.value);
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('sort', e.target.value);
-    setSearchParams(newParams);
+    const newSort = e.target.value;
+    setSortBy(newSort);
+    setSearchParams((prevParams) => {
+      const next = new URLSearchParams(prevParams);
+      next.set('sort', newSort);
+      return next;
+    });
+  };
+
+  // Phase 2 Handlers
+  const handlePriceBracketSelect = (min, max) => {
+    setMinPrice(min);
+    setMaxPrice(max);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (min) next.set('minPrice', min);
+      else next.delete('minPrice');
+      if (max) next.set('maxPrice', max);
+      else next.delete('maxPrice');
+      return next;
+    });
+  };
+
+  const handleCustomPriceChange = (type, val) => {
+    if (type === 'min') {
+      setMinPrice(val);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (val) next.set('minPrice', val);
+        else next.delete('minPrice');
+        return next;
+      }, { replace: true });
+    } else {
+      setMaxPrice(val);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (val) next.set('maxPrice', val);
+        else next.delete('maxPrice');
+        return next;
+      }, { replace: true });
+    }
+  };
+
+  const handleInStockToggle = (e) => {
+    const checked = e.target.checked;
+    setInStockOnly(checked);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (checked) next.set('inStock', 'true');
+      else next.delete('inStock');
+      return next;
+    });
+  };
+
+  const handleRatingSelect = (rating) => {
+    const newRating = minRating === rating ? 0 : rating;
+    setMinRating(newRating);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newRating > 0) next.set('rating', String(newRating));
+      else next.delete('rating');
+      return next;
+    });
+  };
+
+  const handleLocationChange = (e) => {
+    const loc = e.target.value;
+    setSelectedLocation(loc);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (loc !== 'All') next.set('location', loc);
+      else next.delete('location');
+      return next;
+    });
   };
 
   const handleAddToCart = (product, e) => {
@@ -162,25 +308,57 @@ export default function Explore() {
     addToCart(product);
   };
 
-  // Local search filter supporting name, description, artisan, location, craft, category
-  const filteredProducts = products.filter((product) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    
-    const nameMatch = product.name?.toLowerCase().includes(term);
-    const descMatch = product.description?.toLowerCase().includes(term);
-    const categoryMatch = product.categories?.name?.toLowerCase().includes(term);
-    const artisanName = (
-      product.artisans?.business_name || 
-      product.artisans?.profiles?.full_name || 
-      ''
-    ).toLowerCase();
-    const artisanMatch = artisanName.includes(term);
-    const locationMatch = product.artisans?.location?.toLowerCase().includes(term);
-    const specMatch = product.artisans?.specialization?.toLowerCase().includes(term);
+  // Multi-Faceted Local Filter: Search, Price, Stock, Rating, Location, Craft Specialization
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      // 1. Text Search Filter
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        const nameMatch = product.name?.toLowerCase().includes(term);
+        const descMatch = product.description?.toLowerCase().includes(term);
+        const categoryMatch = product.categories?.name?.toLowerCase().includes(term);
+        const businessMatch = product.artisans?.business_name?.toLowerCase().includes(term);
+        const artisanPersonMatch = product.artisans?.profiles?.full_name?.toLowerCase().includes(term);
+        const locationMatch = product.artisans?.location?.toLowerCase().includes(term);
+        const specMatch = product.artisans?.specialization?.toLowerCase().includes(term);
 
-    return nameMatch || descMatch || categoryMatch || artisanMatch || locationMatch || specMatch;
-  });
+        if (!(nameMatch || descMatch || categoryMatch || businessMatch || artisanPersonMatch || locationMatch || specMatch)) {
+          return false;
+        }
+      }
+
+      // 2. Price Range Filter
+      const price = Number(product.price);
+      if (minPrice !== '' && !isNaN(Number(minPrice))) {
+        if (price < Number(minPrice)) return false;
+      }
+      if (maxPrice !== '' && !isNaN(Number(maxPrice))) {
+        if (price > Number(maxPrice)) return false;
+      }
+
+      // 3. In-Stock Availability Filter
+      if (inStockOnly) {
+        const stock = Number(product.stock_quantity ?? 0);
+        if (stock <= 0) return false;
+      }
+
+      // 4. Minimum Customer Rating Filter
+      if (minRating > 0) {
+        const rating = Number(product.average_rating || 0);
+        if (rating < minRating) return false;
+      }
+
+      // 5. Artisan Location / Region Filter
+      if (selectedLocation !== 'All') {
+        const prodLocation = (product.artisans?.location || '').toLowerCase();
+        if (!prodLocation.includes(selectedLocation.toLowerCase())) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [products, searchTerm, minPrice, maxPrice, inStockOnly, minRating, selectedLocation]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 animate-fade-in">
@@ -218,8 +396,22 @@ export default function Explore() {
                 placeholder="Search by product name, category, location, or artisan shop..."
                 value={searchTerm}
                 onChange={handleSearchChange}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-300 rounded focus:ring-2 focus:ring-gov-navy focus:bg-white text-sm transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-300 rounded focus:ring-2 focus:ring-gov-navy focus:bg-white text-sm transition-all"
+                aria-label="Search products"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <span className="text-sm font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-full w-5 h-5 flex items-center justify-center">
+                    ✕
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -261,6 +453,124 @@ export default function Explore() {
                 {cat}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Phase 2: Multi-Dimensional Filter Suite */}
+        <div className="border-t border-slate-100 pt-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* 1. Price Brackets */}
+            <div className="space-y-2">
+              <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Price Brackets
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {priceBrackets.map((bracket) => {
+                  const isActive = minPrice === bracket.min && maxPrice === bracket.max;
+                  return (
+                    <button
+                      key={bracket.label}
+                      type="button"
+                      onClick={() => handlePriceBracketSelect(bracket.min, bracket.max)}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                        isActive
+                          ? 'bg-gov-navy text-white border-gov-navy shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {bracket.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Custom Budget Inputs */}
+            <div className="space-y-2">
+              <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Custom Budget (₹)
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Min ₹"
+                  value={minPrice}
+                  onChange={(e) => handleCustomPriceChange('min', e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 focus:ring-1 focus:ring-gov-navy"
+                  aria-label="Minimum price in rupees"
+                />
+                <span className="text-slate-400 text-xs">-</span>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Max ₹"
+                  value={maxPrice}
+                  onChange={(e) => handleCustomPriceChange('max', e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 focus:ring-1 focus:ring-gov-navy"
+                  aria-label="Maximum price in rupees"
+                />
+              </div>
+            </div>
+
+            {/* 3. Rating & Stock Availability */}
+            <div className="space-y-2">
+              <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Customer Rating & Stock
+              </span>
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  {[4, 3].map((stars) => {
+                    const isActive = minRating === stars;
+                    return (
+                      <button
+                        key={stars}
+                        type="button"
+                        onClick={() => handleRatingSelect(stars)}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded border transition-colors cursor-pointer flex items-center gap-1 ${
+                          isActive
+                            ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        <span>{stars}★ & above</span>
+                        {isActive && <span className="text-[10px]">✕</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={handleInStockToggle}
+                    className="w-3.5 h-3.5 text-gov-navy rounded border-slate-300 focus:ring-gov-navy cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold text-slate-700">In Stock Only</span>
+                </label>
+              </div>
+            </div>
+
+            {/* 4. Artisan Region / Location */}
+            <div className="space-y-2">
+              <label htmlFor="explore-location" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Artisan Region
+              </label>
+              <select
+                id="explore-location"
+                value={selectedLocation}
+                onChange={handleLocationChange}
+                className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 font-medium focus:ring-1 focus:ring-gov-navy cursor-pointer"
+              >
+                <option value="All">All Regions / States</option>
+                {availableLocations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    📍 {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
