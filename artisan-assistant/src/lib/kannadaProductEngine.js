@@ -333,12 +333,20 @@ export function extractProductFacts(rawText) {
 
   // Extract intended use if stated
   let intendedUse = null;
+  let intendedUseKn = null;
+  let intendedUseEn = null;
   if (normalized.includes('ನೀರು ತಂಪಾಗಿಸಲು') || normalized.includes('ತಂಪಾಗಿಸಲು') || normalized.includes('ನೀರು ಕುಡಿಯಲು') || normalized.includes('cooling water') || normalized.includes('drinking water')) {
     intendedUse = 'ಕುಡಿಯುವ ನೀರನ್ನು ನೈಸರ್ಗಿಕವಾಗಿ ತಂಪಾಗಿಡಲು (Natural Water Cooling)';
+    intendedUseKn = 'ಕುಡಿಯುವ ನೀರನ್ನು ನೈಸರ್ಗಿಕವಾಗಿ ತಂಪಾಗಿಡಲು';
+    intendedUseEn = 'Natural water cooling and everyday drinking';
   } else if (normalized.includes('ಪೂಜೆಗೆ') || normalized.includes('ದೇವರ') || normalized.includes('puja') || normalized.includes('worship')) {
     intendedUse = 'ದೇವರಿಗೆ ಮತ್ತು ಪೂಜೆಗೆ (Puja and Rituals)';
+    intendedUseKn = 'ದೇವರಿಗೆ ಮತ್ತು ಪೂಜೆಗೆ';
+    intendedUseEn = 'Religious rituals and sacred worship';
   } else if (normalized.includes('ಅಲಂಕಾರಕ್ಕೆ') || normalized.includes('ಮನೆ ಅಲಂಕಾರ') || normalized.includes('decor') || normalized.includes('home decor')) {
     intendedUse = 'ಮನೆಯ ಅಲಂಕಾರಕ್ಕೆ (Home Decor)';
+    intendedUseKn = 'ಮನೆಯ ಅಲಂಕಾರಕ್ಕೆ';
+    intendedUseEn = 'Home decor and interior display';
   }
 
   // Extract explicit selling price (avoid matching internal cost)
@@ -359,15 +367,34 @@ export function extractProductFacts(rawText) {
 
   // Extract explicit quantity
   let stockQuantity = null;
-  const knQtyMatch = normalized.match(/(?:ದಾಸ್ತಾನು|ಪ್ರಮಾಣ)\s*(\d{1,4})/u)
-    || normalized.match(/(\d{1,4})\s*(?:ತುಂಡು|ಸಂಖ್ಯೆ|ಪೀಸ್|ಸೀರೆ|ಮಡಕೆ|ಬುಟ್ಟಿ)/u);
-  const enQtyMatch = normalized.match(/(?:stock|quantity)\s*(?:of)?\s*(\d{1,4})/i)
-    || normalized.match(/(\d{1,4})\s*(?:pieces|items|units|pcs)/i);
+  const knQtyMatch = normalized.match(/(?:ದಾಸ್ತಾನು|ಪ್ರಮಾಣ|ಸಂಖ್ಯೆ|ಬಳಿ\s*ಇರುವ|ತಯಾರಿಸಿರುವ|ಮಾಡಿದ)\s*(?:ಸುಮಾರು|ಅಂದಾಜು)?\s*(\d{1,4})/u)
+    || normalized.match(/(\d{1,4})\s*(?:ತುಂಡುಗಳು|ತುಂಡು|ಸಂಖ್ಯೆ|ಐಟಂಗಳು|ಐಟಂ|ಪೀಸ್|ಯೂನಿಟ್|ಮಡಕೆಗಳು|ಮಡಕೆ|ಬುಟ್ಟಿಗಳು|ಬುಟ್ಟಿ|ಸೀರೆಗಳು|ಸೀರೆ|ಆಟಿಕೆಗಳು|ಆಟಿಕೆ|ವಿಗ್ರಹಗಳು|ವಿಗ್ರಹ|units?)/iu)
+    || normalized.match(/(\d{1,4})\s*(?:ದಾಸ್ತಾನು\s*ಇದೆ|ಬಾಕಿ\s*ಇದೆ|ಸಿದ್ಧವಾಗಿದೆ|ಇವೆ|ಇದೆ)/iu);
+  const enQtyMatch = normalized.match(/(?:stock|quantity|total|have|made|ready|available)\s*(?:of|around|about)?\s*(\d{1,4})/i)
+    || normalized.match(/(\d{1,4})\s*(?:pieces|items|units|pcs|baskets|pots|sarees|shawls|vases|boxes|toys|idols|crafts)/i)
+    || normalized.match(/(\d{1,4})\s*(?:in\s*stock|available|ready)/i);
 
   if (knQtyMatch && knQtyMatch[1]) {
     stockQuantity = parseInt(knQtyMatch[1], 10);
   } else if (enQtyMatch && enQtyMatch[1]) {
     stockQuantity = parseInt(enQtyMatch[1], 10);
+  }
+
+  // Extract production time if stated (e.g. 3 ದಿನಗಳು, 1 ವಾರ, 2 weeks, 5 hours)
+  let productionTime = null;
+  let productionTimeKn = null;
+  const knTimeMatch = normalized.match(/(\d{1,3})\s*(?:ದಿನಗಳು|ದಿನ|ವಾರಗಳು|ವಾರ|ತಿಂಗಳು|ಗಂಟೆಗಳು|ಗಂಟೆ)/iu);
+  const enTimeMatch = normalized.match(/\b(\d{1,3})\s*(?:days?|weeks?|months?|hours?)\b/i);
+  if (knTimeMatch) {
+    productionTimeKn = knTimeMatch[0];
+    const num = knTimeMatch[1];
+    if (knTimeMatch[0].includes('ದಿನ')) productionTime = `${num} days`;
+    else if (knTimeMatch[0].includes('ವಾರ')) productionTime = `${num} weeks`;
+    else if (knTimeMatch[0].includes('ತಿಂಗಳು')) productionTime = `${num} months`;
+    else if (knTimeMatch[0].includes('ಗಂಟೆ')) productionTime = `${num} hours`;
+  } else if (enTimeMatch) {
+    productionTime = enTimeMatch[0];
+    productionTimeKn = enTimeMatch[0];
   }
 
   let confidence = 'low';
@@ -387,8 +414,12 @@ export function extractProductFacts(rawText) {
     productFormEn,
     dimensions,
     intendedUse,
+    intendedUseEn,
+    intendedUseKn,
+    productionTime,
+    productionTimeKn,
     price,
-    stockQuantity: stockQuantity || 1,
+    stockQuantity,
     unsupportedInvented: false
   };
 }
@@ -406,7 +437,7 @@ export function buildProductListing(rawTranscript, extractedFacts) {
     cleaned = cleaned.replace(pat, '').trim();
   }
 
-  // 1. Kannada Title: Derived strictly from genuine craft facts
+  // 1. Kannada Title: Derived strictly from genuine craft facts (never first words/sentences)
   let localTitle = '';
   if (extractedFacts.productFormKn) {
     const mat = extractedFacts.titleMaterialKn || extractedFacts.materialKn;
@@ -416,15 +447,14 @@ export function buildProductListing(rawTranscript, extractedFacts) {
       localTitle = `ಕೈಯಿಂದ ಮಾಡಿದ ${extractedFacts.productFormKn}`;
     }
   } else if (extractedFacts.titleMaterialKn || extractedFacts.materialKn) {
-    localTitle = `ಕೈಯಿಂದ ಮಾಡಿದ ${extractedFacts.titleMaterialKn || extractedFacts.materialKn} ಕರಕುಶಲ ಉತ್ಪನ್ನ`;
-  } else if (isKn && cleaned.length > 2) {
-    const firstPhrase = cleaned.split(/[.\n!?]/)[0].trim();
-    localTitle = firstPhrase.length > 35 ? firstPhrase.substring(0, 35) : firstPhrase;
+    localTitle = `ಕೈಯಿಂದ ಮಾಡಿದ ${extractedFacts.titleMaterialKn || extractedFacts.materialKn} ಕರಕುಶಲ ಕೃತಿ`;
+  } else if (extractedFacts.matchedCategory && extractedFacts.matchedCategory !== 'Other Handicrafts') {
+    localTitle = `ಪಾರಂಪರಿಕ ${extractedFacts.matchedCategory} ಕರಕುಶಲ ಉತ್ಪನ್ನ`;
   } else {
     localTitle = 'ಪಾರಂಪರಿಕ ಕರಕುಶಲ ಉತ್ಪನ್ನ';
   }
 
-  // 2. English Title: For marketplace discovery
+  // 2. English Title: Concise noun-based product title for marketplace discovery
   let englishTitle = '';
   if (extractedFacts.productFormEn) {
     const matEn = extractedFacts.titleMaterialEn || (extractedFacts.material ? extractedFacts.material.charAt(0).toUpperCase() + extractedFacts.material.slice(1).toLowerCase() : '');
@@ -433,6 +463,8 @@ export function buildProductListing(rawTranscript, extractedFacts) {
     } else {
       englishTitle = `Handcrafted ${extractedFacts.productFormEn}`;
     }
+  } else if (extractedFacts.titleMaterialEn || extractedFacts.material) {
+    englishTitle = `Handcrafted ${extractedFacts.titleMaterialEn || extractedFacts.material} Artisan Product`;
   } else if (extractedFacts.matchedCategory && extractedFacts.matchedCategory !== 'Other Handicrafts') {
     englishTitle = `Handcrafted ${extractedFacts.matchedCategory} Product`;
   } else {
@@ -458,8 +490,11 @@ export function buildProductListing(rawTranscript, extractedFacts) {
   if (extractedFacts.dimensions) {
     knDescParts.push(`ಅಳತೆ (Size): ${extractedFacts.dimensions}.`);
   }
-  if (extractedFacts.intendedUse) {
-    knDescParts.push(`ಉಪಯೋಗ (Intended Use): ${extractedFacts.intendedUse}.`);
+  if (extractedFacts.intendedUseKn || extractedFacts.intendedUse) {
+    knDescParts.push(`ಉಪಯೋಗ (Intended Use): ${extractedFacts.intendedUseKn || extractedFacts.intendedUse}.`);
+  }
+  if (extractedFacts.productionTimeKn || extractedFacts.productionTime) {
+    knDescParts.push(`ತಯಾರಿಕಾ ಸಮಯ: ${extractedFacts.productionTimeKn || extractedFacts.productionTime}.`);
   }
 
   // Include artisan's verified details if present without raw internal costs
@@ -477,17 +512,22 @@ export function buildProductListing(rawTranscript, extractedFacts) {
     enDescParts.push('Authentic handcrafted artisan product preserving traditional heritage techniques.');
   }
 
-  if (extractedFacts.titleMaterialEn || extractedFacts.material) {
+  if (extractedFacts.titleMaterialEn || (extractedFacts.material && !isKannadaScript(extractedFacts.material))) {
     enDescParts.push(`Craft Material: ${extractedFacts.titleMaterialEn || extractedFacts.material}.`);
   }
-  if (extractedFacts.technique) {
+  if (extractedFacts.technique && !isKannadaScript(extractedFacts.technique)) {
     enDescParts.push(`Technique: ${extractedFacts.technique}.`);
   }
-  if (extractedFacts.dimensions) {
+  if (extractedFacts.dimensions && !isKannadaScript(extractedFacts.dimensions)) {
     enDescParts.push(`Dimensions: ${extractedFacts.dimensions}.`);
   }
-  if (extractedFacts.intendedUse) {
+  if (extractedFacts.intendedUseEn) {
+    enDescParts.push(`Intended Use: ${extractedFacts.intendedUseEn}.`);
+  } else if (extractedFacts.intendedUse && !isKannadaScript(extractedFacts.intendedUse)) {
     enDescParts.push(`Intended Use: ${extractedFacts.intendedUse}.`);
+  }
+  if (extractedFacts.productionTime && !isKannadaScript(extractedFacts.productionTime)) {
+    enDescParts.push(`Crafting Time: ${extractedFacts.productionTime}.`);
   }
   enDescParts.push('Every piece is individually handcrafted, celebrating genuine craftsmanship and heritage.');
 
@@ -496,10 +536,25 @@ export function buildProductListing(rawTranscript, extractedFacts) {
   // Missing details check (Never invent missing price or material!)
   const missingDetails = [];
   if (extractedFacts.price === null) {
-    missingDetails.push({ field: 'price', prompt_kn: 'ದಯವಿಟ್ಟು ಈ ಉತ್ಪನ್ನದ ಮಾರಾಟ ಬೆಲೆ (Price) ಎಷ್ಟು ಎಂದು ತಿಳಿಸಿ.', prompt_en: 'Please provide the selling price.' });
+    missingDetails.push({
+      field: 'price',
+      prompt_kn: 'ದಯವಿಟ್ಟು ಈ ಉತ್ಪನ್ನದ ಮಾರಾಟ ಬೆಲೆ (Selling Price) ಎಷ್ಟು ಎಂದು ತಿಳಿಸಿ.',
+      prompt_en: 'Please specify the selling price for this product.'
+    });
   }
   if (!extractedFacts.material && !extractedFacts.materialKn) {
-    missingDetails.push({ field: 'material', prompt_kn: 'ದಯವಿಟ್ಟು ಇದು ಯಾವ ವಸ್ತುವಿನಿಂದ (Material) ಮಾಡಲ್ಪಟ್ಟಿದೆ ಎಂದು ತಿಳಿಸಿ.', prompt_en: 'Please specify the craft material.' });
+    missingDetails.push({
+      field: 'material',
+      prompt_kn: 'ದಯವಿಟ್ಟು ಇದು ಯಾವ ವಸ್ತುವಿನಿಂದ (Material) ಮಾಡಲ್ಪಟ್ಟಿದೆ ಎಂದು ತಿಳಿಸಿ.',
+      prompt_en: 'Please specify the craft material.'
+    });
+  }
+  if (extractedFacts.stockQuantity === null) {
+    missingDetails.push({
+      field: 'stock_quantity',
+      prompt_kn: 'ದಯವಿಟ್ಟು ಲಭ್ಯವಿರುವ ದಾಸ್ತಾನು ಪ್ರಮಾಣ (Stock Quantity) ಎಷ್ಟು ಎಂದು ದೃಢೀಕರಿಸಿ.',
+      prompt_en: 'Please confirm the available stock quantity.'
+    });
   }
 
   return {
@@ -509,8 +564,10 @@ export function buildProductListing(rawTranscript, extractedFacts) {
     englishDescription,
     category: extractedFacts.matchedCategory || 'Other Handicrafts',
     confidence: extractedFacts.confidence,
-    price: extractedFacts.price || 500,
-    stock_quantity: extractedFacts.stockQuantity || 1,
+    price: extractedFacts.price ?? null, // Never invent or default to 500
+    isPriceProvisional: extractedFacts.price === null,
+    stock_quantity: extractedFacts.stockQuantity !== null ? extractedFacts.stockQuantity : 1,
+    isStockProvisional: extractedFacts.stockQuantity === null,
     missingDetails,
     needsClarification: extractedFacts.confidence === 'low' || missingDetails.length > 0,
     rawTranscript
@@ -546,7 +603,12 @@ export function interpretCorrectionCommand(commandText, currentDraft, _lang = 'k
       newValue: newPrice,
       message_kn: `✅ ಉತ್ಪನ್ನದ ಬೆಲೆಯನ್ನು ₹${newPrice} ಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.`,
       message_en: `✅ Updated product price to ₹${newPrice}.`,
-      updatedDraft: { ...currentDraft, price: newPrice }
+      updatedDraft: {
+        ...currentDraft,
+        price: newPrice,
+        isPriceProvisional: false,
+        missingDetails: (currentDraft.missingDetails || []).filter((m) => m.field !== 'price')
+      }
     };
   }
   if (enPriceChange && enPriceChange[1]) {
@@ -557,7 +619,12 @@ export function interpretCorrectionCommand(commandText, currentDraft, _lang = 'k
       newValue: newPrice,
       message_kn: `✅ ಉತ್ಪನ್ನದ ಬೆಲೆಯನ್ನು ₹${newPrice} ಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.`,
       message_en: `✅ Updated product price to ₹${newPrice}.`,
-      updatedDraft: { ...currentDraft, price: newPrice }
+      updatedDraft: {
+        ...currentDraft,
+        price: newPrice,
+        isPriceProvisional: false,
+        missingDetails: (currentDraft.missingDetails || []).filter((m) => m.field !== 'price')
+      }
     };
   }
 
@@ -575,7 +642,12 @@ export function interpretCorrectionCommand(commandText, currentDraft, _lang = 'k
       newValue: newQty,
       message_kn: `✅ ದಾಸ್ತಾನು ಪ್ರಮಾಣವನ್ನು ${newQty} ಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.`,
       message_en: `✅ Updated stock quantity to ${newQty}.`,
-      updatedDraft: { ...currentDraft, stock_quantity: newQty }
+      updatedDraft: {
+        ...currentDraft,
+        stock_quantity: newQty,
+        isStockProvisional: false,
+        missingDetails: (currentDraft.missingDetails || []).filter((m) => m.field !== 'stock_quantity')
+      }
     };
   }
   if (enStockChange && enStockChange[1]) {
@@ -586,7 +658,12 @@ export function interpretCorrectionCommand(commandText, currentDraft, _lang = 'k
       newValue: newQty,
       message_kn: `✅ ದಾಸ್ತಾನು ಪ್ರಮಾಣವನ್ನು ${newQty} ಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.`,
       message_en: `✅ Updated stock quantity to ${newQty}.`,
-      updatedDraft: { ...currentDraft, stock_quantity: newQty }
+      updatedDraft: {
+        ...currentDraft,
+        stock_quantity: newQty,
+        isStockProvisional: false,
+        missingDetails: (currentDraft.missingDetails || []).filter((m) => m.field !== 'stock_quantity')
+      }
     };
   }
 

@@ -362,3 +362,41 @@ test('12. Product draft generation receives the actual transcript end-to-end', (
   assert.ok(listing.localDescription.includes('ಜೇಡಿಮಣ್ಣು') || listing.localDescription.includes('ಮಣ್ಣು'), 'Local description must preserve artisan facts');
   assert.equal(listing.needsClarification, false, 'No clarification needed since facts were voiced');
 });
+
+test('13. Live timer ticks every second and resets properly on cancellation', async () => {
+  const mockWin = {
+    isSecureContext: true,
+    location: { hostname: 'localhost', protocol: 'http:' },
+    SpeechRecognition: MockSpeechRecognition,
+    MediaRecorder: null,
+    navigator: { mediaDevices: { getUserMedia: async () => new MockMediaStream() } },
+  };
+
+  const ticks = [];
+  const session = createVoiceSession({
+    language: 'kn',
+    customWindow: mockWin,
+    onTimerTick: (sec) => ticks.push(sec),
+  });
+
+  await session.start();
+  // Advance time briefly to test timer tick
+  await new Promise((resolve) => setTimeout(resolve, 1050));
+  assert.ok(ticks.length >= 1, 'onTimerTick must be invoked on timer intervals');
+  assert.ok(session.getSecondsElapsed() >= 1, 'Session elapsed seconds must be at least 1');
+
+  session.cancel();
+  assert.equal(session.getSecondsElapsed(), 0, 'Seconds elapsed must reset to 0 on cancel');
+  assert.equal(session.getState(), VOICE_STATES.IDLE, 'State must return to idle');
+});
+
+test('14. Granular error messages distinguish unconfigured backend and recorded audio from silence', () => {
+  const knMsgUnconfigured = getVoiceStatusMessage(VOICE_STATES.RECOGNITION_FAILED, 'kn', { reason: 'backend_unconfigured' });
+  assert.ok(knMsgUnconfigured.includes('ಕಾನ್ಫಿಗರ್ ಆಗಿಲ್ಲ') || knMsgUnconfigured.includes('ಲಭ್ಯವಿಲ್ಲ'), 'Must explain backend is unconfigured');
+
+  const enMsgRecorded = getVoiceStatusMessage(VOICE_STATES.RECOGNITION_FAILED, 'en', { reason: 'audio_recorded_no_transcription' });
+  assert.ok(enMsgRecorded.includes('Audio recorded'), 'Must indicate audio was recorded but transcription unavailable');
+
+  const enMsgSilence = getVoiceStatusMessage(VOICE_STATES.RECOGNITION_FAILED, 'en', { reason: 'no_speech' });
+  assert.ok(enMsgSilence.includes('No speech was detected'), 'Must state no speech detected for true silence');
+});

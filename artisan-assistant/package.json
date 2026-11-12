@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node --test tests/kannada_pipeline.test.js tests/voice_recognition.test.js tests/mobile_camera_gallery.test.js",
+    "test": "node --test tests/kannada_pipeline.test.js tests/voice_recognition.test.js tests/mobile_camera_gallery.test.js tests/enhancements.test.js tests/auth_and_storage_policy.test.js tests/orders_and_earnings.test.js tests/voice_to_english_listing.test.js tests/step6_whatsapp_experience.test.js tests/step1_welcome_and_login.test.js tests/demo_artisan_onboarding.test.js tests/whatsapp_integration.test.js tests/performance_and_reviews.test.js tests/integration_and_repair.test.js tests/phase2_delivery_negotiation_insights.test.js tests/enquiry_negotiation_rls_lifecycle.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

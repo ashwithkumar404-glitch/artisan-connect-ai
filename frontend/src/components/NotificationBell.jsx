@@ -145,9 +145,16 @@ export default function NotificationBell({ light = false }) {
       navigate('/artisan/verification');
     } else if (
       notification.type === 'order_status_changed' ||
-      notification.type === 'artisan_responded'
+      notification.type === 'artisan_responded' ||
+      notification.type === 'enquiry_confirmed' ||
+      notification.type === 'enquiry_counteroffer'
     ) {
-      navigate('/profile'); // Customer Dashboard
+      if (notification.type === 'order_status_changed') {
+        navigate('/profile?tab=orders');
+      } else {
+        const enqParam = notification.reference_id ? `&enquiryId=${notification.reference_id}` : '';
+        navigate(`/profile?tab=enquiries${enqParam}`);
+      }
     } else if (notification.type === 'enquiry_forwarded') {
       navigate('/artisan/enquiries'); // Artisan Enquiries Log
     } else if (

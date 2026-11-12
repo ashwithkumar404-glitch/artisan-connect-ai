@@ -11,7 +11,8 @@ function ChatBubble({
   onSaveDraft,
   onPublishDraft,
   onUpdateDraft,
-  language = 'kn'
+  language = 'kn',
+  welcomeCard,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [showEnglishPreview, setShowEnglishPreview] = useState(false);
@@ -78,7 +79,75 @@ function ChatBubble({
         </div>
       )}
 
-      {/* 2. Text Content */}
+      {/* 2. Craft-Inspired Welcome Experience Card */}
+      {welcomeCard && (
+        <div className="welcome-craft-card">
+          <div className="welcome-craft-header">
+            {welcomeCard.avatarUrl ? (
+              <img
+                src={welcomeCard.avatarUrl}
+                alt="Artisan Profile"
+                className="welcome-craft-avatar"
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  minWidth: '44px',
+                  minHeight: '44px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '1.5px solid var(--primary-green)'
+                }}
+              />
+            ) : (
+              <span className="welcome-craft-emblem" aria-hidden="true">{welcomeCard.emblem || '🧵'}</span>
+            )}
+            <div className="welcome-craft-header-text">
+              <h3 className="welcome-craft-title">{welcomeCard.title}</h3>
+              <p className="welcome-craft-subtitle">{welcomeCard.subtitle}</p>
+            </div>
+          </div>
+
+          {welcomeCard.specialization && (
+            <div className="welcome-specialization-row">
+              <span className="specialization-tag">
+                🎨 {welcomeCard.specialization}
+              </span>
+              {welcomeCard.experienceYears && (
+                <span className="specialization-tag" style={{ background: 'var(--chat-bg)' }}>
+                  ⏳ {welcomeCard.experienceYears} {isKn ? 'ವರ್ಷಗಳ ಅನುಭವ' : 'yrs exp'}
+                </span>
+              )}
+              {welcomeCard.isVerified && (
+                <span className="welcome-verified-badge">
+                  ✓ {isKn ? 'ಪರಿಶೀಲಿತ ಕುಶಲಕರ್ಮಿ' : 'Verified Artisan'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {welcomeCard.guidance && (
+            <div className="welcome-craft-guidance">
+              <p className="guidance-text">💡 {welcomeCard.guidance}</p>
+            </div>
+          )}
+
+          {welcomeCard.steps && welcomeCard.steps.length > 0 && (
+            <div className="welcome-craft-steps">
+              {welcomeCard.steps.map((st, idx) => (
+                <div key={idx} className="welcome-step-item">
+                  <div className="step-icon-circle" aria-hidden="true">{st.icon}</div>
+                  <div className="step-details">
+                    <strong className="step-title">{st.title}</strong>
+                    <span className="step-desc">{st.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Text Content */}
       {text && <div style={{ fontSize: '0.9rem' }}>{renderFormattedText(text)}</div>}
 
       {/* 3. Interactive Draft Review & Edit Card */}
@@ -90,57 +159,57 @@ function ChatBubble({
 
           {isEditing ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                 {isKn ? 'ಕನ್ನಡ ಶೀರ್ಷಿಕೆ (Kannada Title):' : 'Title:'}
                 <input
                   type="text"
                   value={editLocalTitle}
                   onChange={(e) => setEditLocalTitle(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                  style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                 />
               </label>
 
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                 {isKn ? 'ಮಾರ್ಕೆಟ್‌ಪ್ಲೇಸ್ ಇಂಗ್ಲಿಷ್ ಶೀರ್ಷಿಕೆ (English Marketplace Title):' : 'English Title:'}
                 <input
                   type="text"
                   value={editEnglishTitle}
                   onChange={(e) => setEditEnglishTitle(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                  style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                 />
               </label>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600 }}>
+                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                   {isKn ? 'ಮಾರಾಟ ಬೆಲೆ (₹):' : 'Price (₹):'}
                   <input
                     type="number"
                     min="1"
                     value={editPrice}
                     onChange={(e) => setEditPrice(e.target.value)}
-                    style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                   />
                 </label>
 
-                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600 }}>
+                <label style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                   {isKn ? 'ದಾಸ್ತಾನು ಪ್ರಮಾಣ:' : 'Stock Qty:'}
                   <input
                     type="number"
                     min="1"
                     value={editStock}
                     onChange={(e) => setEditStock(e.target.value)}
-                    style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                   />
                 </label>
               </div>
 
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
                 {isKn ? 'ವಿವರಣೆ (Description):' : 'Description:'}
                 <textarea
                   value={editDesc}
                   rows={3}
                   onChange={(e) => setEditDesc(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', marginTop: '0.2rem' }}
+                  style={{ width: '100%', padding: '0.4rem', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', marginTop: '0.2rem' }}
                 />
               </label>
 
@@ -157,11 +226,11 @@ function ChatBubble({
             <div>
               {/* Voice correction helper hint */}
               <div style={{
-                background: '#e8f5e9',
-                borderLeft: '4px solid #2e7d32',
+                background: 'var(--light-green)',
+                borderLeft: '4px solid var(--primary-green)',
                 padding: '0.4rem 0.6rem',
                 fontSize: '0.78rem',
-                color: '#1b5e20',
+                color: 'var(--primary-green)',
                 borderRadius: '4px',
                 marginBottom: '0.5rem'
               }}>
@@ -172,7 +241,7 @@ function ChatBubble({
               </div>
 
               {/* Title in reviewed language */}
-              <h3 className="draft-title" style={{ fontSize: '1.1rem', color: '#075E54' }}>
+              <h3 className="draft-title" style={{ fontSize: '1.1rem', color: 'var(--primary-green)' }}>
                 {isKn ? (draft.local_title || draft.name) : draft.name}
               </h3>
 
@@ -180,11 +249,42 @@ function ChatBubble({
                 {isKn ? 'ವರ್ಗ (Category):' : 'Category:'} <strong>{draft.category_name || draft.category}</strong>
               </div>
 
-              <div className="draft-price-badge">
-                ₹{draft.price} INR <span style={{ fontWeight: 'normal', fontSize: '0.75rem' }}>
-                  ({isKn ? 'ದಾಸ್ತಾನು' : 'Stock'}: {draft.stock_quantity})
+              <div className="draft-price-badge" style={{
+                background: !draft.price || Number(draft.price) <= 0 ? 'rgba(239, 68, 68, 0.12)' : undefined,
+                color: !draft.price || Number(draft.price) <= 0 ? '#DC2626' : undefined,
+                border: !draft.price || Number(draft.price) <= 0 ? '1px solid rgba(239, 68, 68, 0.3)' : undefined
+              }}>
+                {draft.price && Number(draft.price) > 0 ? (
+                  <>₹{draft.price} INR</>
+                ) : (
+                  <span style={{ fontWeight: 700 }}>
+                    {isKn ? '⚠️ ಬೆಲೆ ನಮೂದಿಸಿಲ್ಲ (Price Required)' : '⚠️ Price Missing - Required'}
+                  </span>
+                )}
+                <span style={{ fontWeight: 'normal', fontSize: '0.75rem', marginLeft: '0.35rem' }}>
+                  ({isKn ? 'ದಾಸ್ತಾನು' : 'Stock'}: {draft.stock_quantity}
+                  {draft.isStockProvisional ? (isKn ? ' - ದೃಢೀಕರಿಸಿ' : ' - To confirm') : ''})
                 </span>
               </div>
+
+              {draft.missingDetails && draft.missingDetails.length > 0 && (
+                <div style={{
+                  marginTop: '0.4rem',
+                  padding: '0.4rem 0.6rem',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  color: '#B45309'
+                }}>
+                  <strong>{isKn ? '📌 ದೃಢೀಕರಿಸಬೇಕಾದ ವಿವರಗಳು:' : '📌 Details to confirm:'}</strong>
+                  <ul style={{ margin: '0.2rem 0 0 1rem', padding: 0 }}>
+                    {draft.missingDetails.map((m, idx) => (
+                      <li key={idx}>{isKn ? m.prompt_kn : m.prompt_en}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="draft-desc" style={{ marginTop: '0.4rem' }}>
                 {isKn ? (draft.local_description || draft.description) : draft.description}
@@ -192,14 +292,14 @@ function ChatBubble({
 
               {/* English marketplace preview toggle */}
               {isKn && (
-                <div style={{ marginTop: '0.6rem', borderTop: '1px dashed #ccc', paddingTop: '0.4rem' }}>
+                <div style={{ marginTop: '0.6rem', borderTop: '1px dashed var(--border)', paddingTop: '0.4rem' }}>
                   <button
                     type="button"
                     onClick={() => setShowEnglishPreview(!showEnglishPreview)}
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#0284c7',
+                      color: 'var(--primary-green)',
                       fontSize: '0.8rem',
                       cursor: 'pointer',
                       padding: 0,
@@ -214,16 +314,16 @@ function ChatBubble({
                   {showEnglishPreview && (
                     <div style={{
                       marginTop: '0.4rem',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--chat-bg)',
+                      border: '1px solid var(--border)',
                       borderRadius: '6px',
                       padding: '0.5rem',
                       fontSize: '0.8rem'
                     }}>
-                      <div style={{ fontWeight: 600, color: '#334155' }}>Marketplace Title:</div>
-                      <div style={{ marginBottom: '0.3rem' }}>{draft.name}</div>
-                      <div style={{ fontWeight: 600, color: '#334155' }}>Marketplace Description:</div>
-                      <div style={{ color: '#475569' }}>{draft.description}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--primary-green)' }}>Marketplace Title:</div>
+                      <div style={{ marginBottom: '0.3rem', color: 'var(--text)' }}>{draft.name}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--primary-green)' }}>Marketplace Description:</div>
+                      <div style={{ color: 'var(--secondary-text)' }}>{draft.description}</div>
                     </div>
                   )}
                 </div>

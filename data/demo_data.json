@@ -1,0 +1,833 @@
+{
+  "products": [
+    {
+      "id": "demo-prod-001",
+      "name": "Channapatna Wooden Rocking Horse",
+      "local_title": "ಚನ್ನಪಟ್ಟಣ ಮರದ ಆಟಿಕೆ ಕುದುರೆ",
+      "category": "Wood Craft",
+      "price": 850,
+      "stock_quantity": 25,
+      "description": "Traditional eco-friendly wooden rocking horse made with seasoned ivory wood and coated with natural vegetable lacquer dyes. Safe for children, durable, and polished with non-toxic lac.",
+      "local_description": "ನೈಸರ್ಗಿಕ ತರಕಾರಿ ಬಣ್ಣಗಳಿಂದ ತಯಾರಿಸಿದ ಸಾಂಪ್ರದಾಯಿಕ ಚನ್ನಪಟ್ಟಣ ಮರದ ಕುದುರೆ ಆಟಿಕೆ. ಮಕ್ಕಳಿಗೆ ಸುರಕ್ಷಿತ ಮತ್ತು ಪರಿಸರಸ್ನೇಹಿ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-002",
+      "name": "Bidriware Silver Inlaid Floral Vase",
+      "local_title": "ಬಿದ್ರಿ ಕಲೆಯ ಬೆಳ್ಳಿಯ ಹೂದಾನಿ",
+      "category": "Metal Craft",
+      "price": 2800,
+      "stock_quantity": 12,
+      "description": "Authentic Bidri craft vase made from an alloy of zinc and copper with pure silver wire inlay depicting traditional Mughal floral motifs, blackened using soil from the Bidar fort.",
+      "local_description": "ಶುದ್ಧ ಬೆಳ್ಳಿಯ ಕಸೂತಿ ಕೆಲಸವಿರುವ ಬಿದ್ರಿ ಕಲಾತ್ಮಕ ಹೂದಾನಿ. ಸತು ಮತ್ತು ತಾಮ್ರದ ಮಿಶ್ರಲೋಹದಿಂದ ತಯಾರಿಸಿದ ಪರಂಪರೆ ಕಲೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-003",
+      "name": "Mysore Pure Silk Zari Saree",
+      "local_title": "ಮೈಸೂರು ರೇಷ್ಮೆ ಜರಿ ಸೀರೆ",
+      "category": "Handloom & Textiles",
+      "price": 4500,
+      "stock_quantity": 10,
+      "description": "Handwoven Mysore pure mulberry silk saree featuring 100% pure gold zari border and rich pallu. Light in weight, smooth texture, and timeless elegance for special celebrations.",
+      "local_description": "ಶುದ್ಧ ಮೈಸೂರು ಮಲ್ಬರಿ ರೇಷ್ಮೆ ಮತ್ತು ಶುದ್ಧ ಜರಿ ಬಾರ್ಡರ್ ಹೊಂದಿರುವ ಕೈಮಗ್ಗದ ಸೀರೆ. ನಯವಾದ ವಿನ್ಯಾಸ ಮತ್ತು ಸಾಂಪ್ರದಾಯಿಕ ಕಳೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-004",
+      "name": "Terracotta Earthen Water Pot with Lid",
+      "local_title": "ಮಣ್ಣಿನ ತಣ್ಣೀರಿನ ಮಡಕೆ ಮುಚ್ಚಳದೊಂದಿಗೆ",
+      "category": "Pottery",
+      "price": 450,
+      "stock_quantity": 40,
+      "description": "Natural clay water pot thrown on a traditional potter's wheel and fired in an open wood kiln. Keeps drinking water naturally cool while infusing essential minerals.",
+      "local_description": "ನೈಸರ್ಗಿಕ ಜೇಡಿಮಣ್ಣಿನಿಂದ ಕೈಯಿಂದ ಮಾಡಿದ ತಣ್ಣೀರಿನ ಮಡಕೆ. ನೈಸರ್ಗಿಕ ತಂಪು ನೀಡುತ್ತದೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-005",
+      "name": "Handcrafted Bamboo Storage Laundry Basket",
+      "local_title": "ಕೈಯಿಂದ ಹೆಣೆದ ನೈಸರ್ಗಿಕ ಬಿದಿರಿನ ಬುಟ್ಟಿ",
+      "category": "Bamboo & Natural Craft",
+      "price": 650,
+      "stock_quantity": 30,
+      "description": "Eco-friendly handwoven bamboo utility basket with integrated handles. Treated naturally against moisture and termites, ideal for laundry, craft storage, or fruits.",
+      "local_description": "ನೈಸರ್ಗಿಕ ಬಿದಿರಿನ ಪಟ್ಟಿಗಳಿಂದ ಗಟ್ಟಿಯಾಗಿ ಹೆಣೆದ ಬುಟ್ಟಿ. ಬಟ್ಟೆ ಅಥವಾ ಹಣ್ಣು ತರಕಾರಿ ಶೇಖರಣೆಗೆ ಸೂಕ್ತ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-006",
+      "name": "Sandalwood Carved Ganesha Idol",
+      "local_title": "ಶ್ರೀಗಂಧದ ಕೆತ್ತನೆಯ ಗಣೇಶನ ಮೂರ್ತಿ",
+      "category": "Wood Craft",
+      "price": 3200,
+      "stock_quantity": 8,
+      "description": "Exquisitely hand-carved Mysore sandalwood Ganesha miniature statue featuring fine micro-carvings and retained natural aromatic scent.",
+      "local_description": "ಸುಗಂಧಭರಿತ ಅಸಲಿ ಶ್ರೀಗಂಧದ ಮರದಲ್ಲಿ ಸೂಕ್ಷ್ಮವಾಗಿ ಕೆತ್ತಲಾದ ಗಣೇಶ ಮೂರ್ತಿ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-007",
+      "name": "Kasuti Hand Embroidery Cushion Cover Set",
+      "local_title": "ಕಸೂತಿ ಕಸೂತಿ ಕಲೆಯ ದಿಂಬಿನ ಕವರ್ ಜೋಡಿ",
+      "category": "Handloom & Textiles",
+      "price": 950,
+      "stock_quantity": 18,
+      "description": "Set of two pure cotton handloom cushion covers adorned with traditional North Karnataka Kasuti needlework featuring Gopura and peacock patterns.",
+      "local_description": "ಉತ್ತರ ಕರ್ನಾಟಕದ ಸಾಂಪ್ರದಾಯಿಕ ಕಸೂತಿ ಕಲೆಯ ಕೈಕಸೂತಿ ಕೆಲಸವಿರುವ ಶುದ್ಧ ಹತ್ತಿ ದಿಂಬಿನ ಹೊದಿಕೆಗಳು.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-008",
+      "name": "Brass Traditional Temple Diya Hanging Lamp",
+      "local_title": "ಹಿತ್ತಾಳೆಯ ತೂಗು ದೀಪ (ಆರತಿ ದೀಪ)",
+      "category": "Metal Craft",
+      "price": 1450,
+      "stock_quantity": 15,
+      "description": "Solid brass hanging lamp crafted using ancient lost-wax casting technique. Features chain links and an ornate peacock crest for puja rooms and festive lighting.",
+      "local_description": "ಸಾಂಪ್ರದಾಯಿಕ ಹಿತ್ತಾಳೆ ಎರಕಹೊಯ್ದ ತೂಗು ದೀಪ. ಪೂಜಾ ಕೋಣೆಗೆ ಮತ್ತು ಹಬ್ಬಗಳಿಗೆ ಪ್ರಶಸ್ತ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-009",
+      "name": "Terracotta Hand-Painted Clay Wall Hanging Plates",
+      "local_title": "ಮಣ್ಣಿನ ಕೈಬಣ್ಣದ ಅಲಂಕಾರಿಕ ಗೋಡೆ ತಟ್ಟೆ",
+      "category": "Pottery",
+      "price": 550,
+      "stock_quantity": 22,
+      "description": "Artisan terracotta round wall hanging plate painted with earthy tribal motifs using water-resistant organic pigments.",
+      "local_description": "ಗೋಡೆಗೆ ಹಾಕಲು ಮಣ್ಣಿನ ಕೈಬಣ್ಣದ ಸುಂದರ ಕಲಾತ್ಮಕ ಅಲಂಕಾರಿಕ ತಟ್ಟೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-010",
+      "name": "Kinnal Wooden Painted Cow & Calf Figurine",
+      "local_title": "ಕಿನ್ನಾಳ ಕಲೆಯ ಕಾಮಧೇನು ಮರದ ಗೊಂಬೆ",
+      "category": "Wood Craft",
+      "price": 1800,
+      "stock_quantity": 9,
+      "description": "Famous GI-tagged Kinnal woodcraft idol made with softwood paste and decorated with vibrant natural colors and rich gold leaf foil embossing.",
+      "local_description": "ಕಿನ್ನಾಳ ಕಲೆಯ ಬಣ್ಣದ ಕಾಮಧೇನು ಗೋವು ಮತ್ತು ಕರುವಿನ ವಿಗ್ರಹ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-011",
+      "name": "Handmade Clay Chai Kulhar Cups (Set of 6)",
+      "local_title": "ಮಣ್ಣಿನ ಕುಲ್ಹಡ್ ಚಹಾ ಕಪ್‌ಗಳು (೬ ರ ಸೆಟ್)",
+      "category": "Pottery",
+      "price": 380,
+      "stock_quantity": 50,
+      "description": "Unglazad terracotta clay chai cups for traditional aromatic Indian masala tea. 100% natural, biodegradable, and reusable.",
+      "local_description": "ಸಾಂಪ್ರದಾಯಿಕ ಮಣ್ಣಿನ ಚಹಾ ಕುಲ್ಹಡ್ ಲೋಟಗಳು (೬ ರ ಸೆಟ್). ನೈಸರ್ಗಿಕ ಸುವಾಸನೆ ನೀಡುತ್ತದೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-012",
+      "name": "Terracotta Ceramic Glazed Stud Earrings",
+      "local_title": "ಮಣ್ಣಿನ ಕಲಾತ್ಮಕ ಕಿವಿಯೋಲೆಗಳು",
+      "category": "Jewellery",
+      "price": 320,
+      "stock_quantity": 35,
+      "description": "Lightweight terracotta clay baked and hand-painted with ceramic glaze and hypoallergenic silver studs.",
+      "local_description": "ಜೇಡಿಮಣ್ಣಿನಿಂದ ಕೈಯಿಂದ ತಯಾರಿಸಿ ಬಣ್ಣ ಹಚ್ಚಿದ ಹಗುರವಾದ ಕಿವಿಯೋಲೆಗಳು.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-013",
+      "name": "Handmade Jute Floor Mat Runner",
+      "local_title": "ನೈಸರ್ಗಿಕ ಗೋಣಿ ನಾರಿನ ನೆಲಹಾಸು",
+      "category": "Bamboo & Natural Craft",
+      "price": 720,
+      "stock_quantity": 20,
+      "description": "Braided golden jute floor mat runner for living rooms and entryways. Strong, sustainable, and biodegradable.",
+      "local_description": "ನೈಸರ್ಗಿಕ ಸೆಣಬಿನ ನಾರಿನಿಂದ ಹೆಣೆದ ಗಟ್ಟಿಮುಟ್ಟಾದ ನೆಲಹಾಸು.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-014",
+      "name": "Ilkal Pure Cotton Handloom Saree",
+      "local_title": "ಇಳಕಲ್ ಹತ್ತಿ ಕೈಮಗ್ಗ ಸೀರೆ",
+      "category": "Handloom & Textiles",
+      "price": 2200,
+      "stock_quantity": 14,
+      "description": "Traditional Ilkal cotton handloom saree with classic red Chikki paras border and distinctive Tope Teni pallu.",
+      "local_description": "ಟೋಪೆ ತೇನಿ ಪಲ್ಲು ಮತ್ತು ಚಿಕ್ಕಿ ಪಾರಸ್ ಬಾರ್ಡರ್ ಹೊಂದಿರುವ ಪ್ರಸಿದ್ಧ ಇಳಕಲ್ ಕೈಮಗ್ಗ ಸೀರೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-015",
+      "name": "Channapatna Wooden Stacking Educational Toy Rings",
+      "local_title": "ಚನ್ನಪಟ್ಟಣ ಮರದ ರಿಂಗ್ ಜೋಡಣೆ ಆಟಿಕೆ",
+      "category": "Wood Craft",
+      "price": 490,
+      "stock_quantity": 30,
+      "description": "Seven colorful polished wooden stacking rings made of hale wood and vegetable dyes to promote motor skills in toddlers.",
+      "local_description": "ಮಕ್ಕಳ ಕೌಶಲ್ಯ ಬೆಳವಣಿಗೆಗೆ ಸುರಕ್ಷಿತ ಚನ್ನಪಟ್ಟಣ ಮರದ ಬಣ್ಣದ ರಿಂಗ್ ಆಟಿಕೆ.",
+      "status": "published",
+      "is_demo": true
+    },
+    {
+      "id": "demo-prod-016",
+      "name": "Bronze Cast Dhokra Tribal Musician Figurine",
+      "local_title": "ಡೋಕ್ರಾ ಬುಡಕಟ್ಟು ಕಂಚಿನ ಸಂಗೀತಗಾರ ಮೂರ್ತಿ",
+      "category": "Metal Craft",
+      "price": 1650,
+      "stock_quantity": 11,
+      "description": "Ancient non-ferrous lost-wax metal casting idol representing traditional folk drummer in Dhokra tribal style.",
+      "local_description": "ಕಂಚಿನ ಸಾಂಪ್ರದಾಯಿಕ ಡೋಕ್ರಾ ಕಲೆಯ ಬುಡಕಟ್ಟು ಸಂಗೀತಗಾರ ಮೂರ್ತಿ.",
+      "status": "published",
+      "is_demo": true
+    }
+  ],
+  "orders": [
+    {
+      "id": "demo-ord-101",
+      "product_id": "demo-prod-001",
+      "quantity": 2,
+      "unit_price": 850,
+      "total_amount": 1700,
+      "status": "placed",
+      "preparation_stage": "not_started",
+      "is_demo": true,
+      "created_at": "2026-11-05T08:30:00Z"
+    },
+    {
+      "id": "demo-ord-102",
+      "product_id": "demo-prod-004",
+      "quantity": 1,
+      "unit_price": 450,
+      "total_amount": 450,
+      "status": "placed",
+      "preparation_stage": "not_started",
+      "is_demo": true,
+      "created_at": "2026-11-05T11:15:00Z"
+    },
+    {
+      "id": "demo-ord-103",
+      "product_id": "demo-prod-007",
+      "quantity": 1,
+      "unit_price": 950,
+      "total_amount": 950,
+      "status": "placed",
+      "preparation_stage": "not_started",
+      "is_demo": true,
+      "created_at": "2026-11-05T14:40:00Z"
+    },
+    {
+      "id": "demo-ord-104",
+      "product_id": "demo-prod-002",
+      "quantity": 1,
+      "unit_price": 2800,
+      "total_amount": 2800,
+      "status": "confirmed",
+      "preparation_stage": "material_selection",
+      "is_demo": true,
+      "created_at": "2026-11-04T09:20:00Z"
+    },
+    {
+      "id": "demo-ord-105",
+      "product_id": "demo-prod-005",
+      "quantity": 3,
+      "unit_price": 650,
+      "total_amount": 1950,
+      "status": "confirmed",
+      "preparation_stage": "material_selection",
+      "is_demo": true,
+      "created_at": "2026-11-04T13:00:00Z"
+    },
+    {
+      "id": "demo-ord-106",
+      "product_id": "demo-prod-011",
+      "quantity": 2,
+      "unit_price": 380,
+      "total_amount": 760,
+      "status": "confirmed",
+      "preparation_stage": "material_selection",
+      "is_demo": true,
+      "created_at": "2026-11-04T16:10:00Z"
+    },
+    {
+      "id": "demo-ord-107",
+      "product_id": "demo-prod-015",
+      "quantity": 4,
+      "unit_price": 490,
+      "total_amount": 1960,
+      "status": "confirmed",
+      "preparation_stage": "material_selection",
+      "is_demo": true,
+      "created_at": "2026-11-03T18:00:00Z"
+    },
+    {
+      "id": "demo-ord-108",
+      "product_id": "demo-prod-003",
+      "quantity": 1,
+      "unit_price": 4500,
+      "total_amount": 4500,
+      "status": "preparing",
+      "preparation_stage": "crafting",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true },
+      "is_demo": true,
+      "created_at": "2026-11-03T10:15:00Z"
+    },
+    {
+      "id": "demo-ord-109",
+      "product_id": "demo-prod-006",
+      "quantity": 1,
+      "unit_price": 3200,
+      "total_amount": 3200,
+      "status": "preparing",
+      "preparation_stage": "crafting",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true },
+      "is_demo": true,
+      "created_at": "2026-11-03T11:45:00Z"
+    },
+    {
+      "id": "demo-ord-110",
+      "product_id": "demo-prod-008",
+      "quantity": 2,
+      "unit_price": 1450,
+      "total_amount": 2900,
+      "status": "preparing",
+      "preparation_stage": "finishing",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true, "quality_inspection": true },
+      "is_demo": true,
+      "created_at": "2026-11-02T14:10:00Z"
+    },
+    {
+      "id": "demo-ord-111",
+      "product_id": "demo-prod-010",
+      "quantity": 1,
+      "unit_price": 1800,
+      "total_amount": 1800,
+      "status": "preparing",
+      "preparation_stage": "finishing",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true },
+      "is_demo": true,
+      "created_at": "2026-11-02T16:30:00Z"
+    },
+    {
+      "id": "demo-ord-112",
+      "product_id": "demo-prod-014",
+      "quantity": 1,
+      "unit_price": 2200,
+      "total_amount": 2200,
+      "status": "preparing",
+      "preparation_stage": "crafting",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true },
+      "is_demo": true,
+      "created_at": "2026-11-02T17:50:00Z"
+    },
+    {
+      "id": "demo-ord-113",
+      "product_id": "demo-prod-001",
+      "quantity": 3,
+      "unit_price": 850,
+      "total_amount": 2550,
+      "status": "ready_for_dispatch",
+      "preparation_stage": "packed",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true, "quality_inspection": true, "protective_packaging": true, "address_labeled": true },
+      "is_demo": true,
+      "created_at": "2026-11-01T09:00:00Z"
+    },
+    {
+      "id": "demo-ord-114",
+      "product_id": "demo-prod-005",
+      "quantity": 2,
+      "unit_price": 650,
+      "total_amount": 1300,
+      "status": "ready_for_dispatch",
+      "preparation_stage": "packed",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true, "quality_inspection": true, "protective_packaging": true, "address_labeled": true },
+      "is_demo": true,
+      "created_at": "2026-11-01T12:00:00Z"
+    },
+    {
+      "id": "demo-ord-115",
+      "product_id": "demo-prod-012",
+      "quantity": 5,
+      "unit_price": 320,
+      "total_amount": 1600,
+      "status": "ready_for_dispatch",
+      "preparation_stage": "packed",
+      "preparation_checklist": { "materials_ready": true, "crafting_started": true, "quality_inspection": true, "protective_packaging": true, "address_labeled": true },
+      "is_demo": true,
+      "created_at": "2026-11-01T15:30:00Z"
+    },
+    {
+      "id": "demo-ord-116",
+      "product_id": "demo-prod-002",
+      "quantity": 1,
+      "unit_price": 2800,
+      "total_amount": 2800,
+      "status": "shipped",
+      "carrier_name": "India Post Speed Post",
+      "tracking_number": "EK783921045IN",
+      "dispatch_date": "2026-10-31T10:00:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-29T10:00:00Z"
+    },
+    {
+      "id": "demo-ord-117",
+      "product_id": "demo-prod-004",
+      "quantity": 2,
+      "unit_price": 450,
+      "total_amount": 900,
+      "status": "shipped",
+      "carrier_name": "Delhivery Express",
+      "tracking_number": "DEL39201948",
+      "dispatch_date": "2026-10-31T12:00:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-29T12:00:00Z"
+    },
+    {
+      "id": "demo-ord-118",
+      "product_id": "demo-prod-007",
+      "quantity": 2,
+      "unit_price": 950,
+      "total_amount": 1900,
+      "status": "shipped",
+      "carrier_name": "Blue Dart",
+      "tracking_number": "BD44920119",
+      "dispatch_date": "2026-10-30T16:00:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-28T16:00:00Z"
+    },
+    {
+      "id": "demo-ord-119",
+      "product_id": "demo-prod-013",
+      "quantity": 1,
+      "unit_price": 720,
+      "total_amount": 720,
+      "status": "shipped",
+      "carrier_name": "Professional Couriers",
+      "tracking_number": "TPC8392010",
+      "dispatch_date": "2026-10-30T11:00:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-28T11:00:00Z"
+    },
+    {
+      "id": "demo-ord-120",
+      "product_id": "demo-prod-001",
+      "quantity": 2,
+      "unit_price": 850,
+      "total_amount": 1700,
+      "status": "delivered",
+      "carrier_name": "India Post Speed Post",
+      "tracking_number": "EK619283741IN",
+      "dispatch_date": "2026-10-25T09:00:00Z",
+      "delivered_at": "2026-10-28T14:30:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-23T09:00:00Z"
+    },
+    {
+      "id": "demo-ord-121",
+      "product_id": "demo-prod-003",
+      "quantity": 1,
+      "unit_price": 4500,
+      "total_amount": 4500,
+      "status": "delivered",
+      "carrier_name": "Blue Dart Express",
+      "tracking_number": "BD10293847",
+      "dispatch_date": "2026-10-24T11:00:00Z",
+      "delivered_at": "2026-10-27T12:15:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-22T11:00:00Z"
+    },
+    {
+      "id": "demo-ord-122",
+      "product_id": "demo-prod-008",
+      "quantity": 1,
+      "unit_price": 1450,
+      "total_amount": 1450,
+      "status": "delivered",
+      "carrier_name": "Delhivery",
+      "tracking_number": "DEL84729104",
+      "dispatch_date": "2026-10-22T10:00:00Z",
+      "delivered_at": "2026-10-25T16:00:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-20T10:00:00Z"
+    },
+    {
+      "id": "demo-ord-123",
+      "product_id": "demo-prod-011",
+      "quantity": 3,
+      "unit_price": 380,
+      "total_amount": 1140,
+      "status": "delivered",
+      "carrier_name": "India Post",
+      "tracking_number": "EK192837465IN",
+      "dispatch_date": "2026-10-20T14:00:00Z",
+      "delivered_at": "2026-10-23T11:00:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-18T14:00:00Z"
+    },
+    {
+      "id": "demo-ord-124",
+      "product_id": "demo-prod-016",
+      "quantity": 1,
+      "unit_price": 1650,
+      "total_amount": 1650,
+      "status": "delivered",
+      "carrier_name": "DTDC Express",
+      "tracking_number": "DTD74829103",
+      "dispatch_date": "2026-10-18T15:00:00Z",
+      "delivered_at": "2026-10-21T13:45:00Z",
+      "is_demo": true,
+      "created_at": "2026-10-16T15:00:00Z"
+    },
+    {
+      "id": "demo-ord-125",
+      "product_id": "demo-prod-004",
+      "quantity": 1,
+      "unit_price": 450,
+      "total_amount": 450,
+      "status": "cancelled",
+      "is_demo": true,
+      "created_at": "2026-10-20T08:00:00Z"
+    }
+  ],
+  "enquiries": [
+    {
+      "id": "demo-enq-201",
+      "product_id": "demo-prod-001",
+      "quantity": 10,
+      "proposed_price": 7500,
+      "counter_price": null,
+      "status": "pending",
+      "notes": "Looking for 10 rocking horses for our family function.",
+      "is_demo": true,
+      "messages": [
+        {
+          "sender_role": "customer",
+          "message": "Hello, I want to purchase 10 wooden rocking horses for a birthday giveaway. Can you do ₹7,500 total?",
+          "proposed_price": 7500
+        }
+      ]
+    },
+    {
+      "id": "demo-enq-202",
+      "product_id": "demo-prod-003",
+      "quantity": 5,
+      "proposed_price": 19000,
+      "counter_price": 21000,
+      "status": "negotiation_ongoing",
+      "notes": "Wedding bulk order enquiry.",
+      "is_demo": true,
+      "messages": [
+        {
+          "sender_role": "customer",
+          "message": "Can you offer 5 pure silk sarees for ₹19,000?",
+          "proposed_price": 19000
+        },
+        {
+          "sender_role": "artisan",
+          "message": "ನಮಸ್ಕಾರ, ರೇಷ್ಮೆ ಮತ್ತು ಜರಿ ವೆಚ್ಚ ಹೆಚ್ಚಿರುವುದರಿಂದ ₹21,000 ಅಂತಿಮ ದರ ನೀಡಬಲ್ಲೆವು.",
+          "proposed_price": 21000
+        }
+      ]
+    },
+    {
+      "id": "demo-enq-203",
+      "product_id": "demo-prod-005",
+      "quantity": 20,
+      "proposed_price": 11000,
+      "counter_price": 12000,
+      "status": "accepted",
+      "notes": "Eco-friendly corporate gift baskets.",
+      "is_demo": true,
+      "messages": [
+        {
+          "sender_role": "customer",
+          "message": "We need 20 bamboo baskets for corporate gift hampers. Budget ₹11,000.",
+          "proposed_price": 11000
+        },
+        {
+          "sender_role": "artisan",
+          "message": "We can craft 20 high-grade baskets for ₹12,000 with premium finishing.",
+          "proposed_price": 12000
+        },
+        {
+          "sender_role": "customer",
+          "message": "Agreed at ₹12,000. Please proceed!",
+          "proposed_price": 12000
+        }
+      ]
+    },
+    {
+      "id": "demo-enq-204",
+      "product_id": "demo-prod-011",
+      "quantity": 100,
+      "proposed_price": 28000,
+      "counter_price": 30000,
+      "status": "confirmed",
+      "notes": "Restaurant opening order for clay kulhars.",
+      "is_demo": true,
+      "messages": [
+        {
+          "sender_role": "customer",
+          "message": "Need 100 sets of kulhar cups for our traditional cafe.",
+          "proposed_price": 28000
+        },
+        {
+          "sender_role": "artisan",
+          "message": "Confirmed at ₹30,000 with bubble wrapping for zero breakage.",
+          "proposed_price": 30000
+        }
+      ]
+    },
+    {
+      "id": "demo-enq-205",
+      "product_id": "demo-prod-007",
+      "quantity": 8,
+      "proposed_price": 6400,
+      "counter_price": 6800,
+      "status": "negotiation_ongoing",
+      "notes": "Kasuti embroidery covers for boutique.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "Can you supply 8 Kasuti covers for ₹6,400?", "proposed_price": 6400 },
+        { "sender_role": "artisan", "message": "₹6,800 is our wholesale price for pure handloom work.", "proposed_price": 6800 }
+      ]
+    },
+    {
+      "id": "demo-enq-206",
+      "product_id": "demo-prod-008",
+      "quantity": 6,
+      "proposed_price": 7500,
+      "counter_price": 8100,
+      "status": "negotiation_ongoing",
+      "notes": "Diwali corporate gift enquiry.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "Need 6 temple lamps for ₹7,500.", "proposed_price": 7500 },
+        { "sender_role": "artisan", "message": "Can fulfill for ₹8,100 including gift boxing.", "proposed_price": 8100 }
+      ]
+    },
+    {
+      "id": "demo-enq-207",
+      "product_id": "demo-prod-002",
+      "quantity": 3,
+      "proposed_price": 7200,
+      "counter_price": 7800,
+      "status": "accepted",
+      "notes": "Art collector bulk buy.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "Interested in 3 Bidri vases for ₹7,200.", "proposed_price": 7200 },
+        { "sender_role": "artisan", "message": "We can agree on ₹7,800 for 3 authentic vases.", "proposed_price": 7800 },
+        { "sender_role": "customer", "message": "Price agreed. Looking forward to dispatch.", "proposed_price": 7800 }
+      ]
+    },
+    {
+      "id": "demo-enq-208",
+      "product_id": "demo-prod-010",
+      "quantity": 4,
+      "proposed_price": 6000,
+      "counter_price": null,
+      "status": "pending",
+      "notes": "Kinnal cow idols for temple shop.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "Can you make 4 painted idols for ₹6,000?", "proposed_price": 6000 }
+      ]
+    },
+    {
+      "id": "demo-enq-209",
+      "product_id": "demo-prod-014",
+      "quantity": 10,
+      "proposed_price": 18000,
+      "counter_price": 20000,
+      "status": "confirmed",
+      "notes": "Handloom festival bulk purchase.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "10 Ilkal cotton sarees budget ₹18,000.", "proposed_price": 18000 },
+        { "sender_role": "artisan", "message": "Agreed at ₹20,000 with custom pallu shades.", "proposed_price": 20000 }
+      ]
+    },
+    {
+      "id": "demo-enq-210",
+      "product_id": "demo-prod-015",
+      "quantity": 25,
+      "proposed_price": 10000,
+      "counter_price": 11000,
+      "status": "negotiation_ongoing",
+      "notes": "Preschool toy order.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "25 stacking sets for preschool.", "proposed_price": 10000 },
+        { "sender_role": "artisan", "message": "₹11,000 is our direct artisan pricing.", "proposed_price": 11000 }
+      ]
+    },
+    {
+      "id": "demo-enq-211",
+      "product_id": "demo-prod-016",
+      "quantity": 2,
+      "proposed_price": 2500,
+      "counter_price": null,
+      "status": "rejected",
+      "notes": "Proposed price below bronze metal cost.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "Offer ₹2,500 for two Dhokra figurines.", "proposed_price": 2500 },
+        { "sender_role": "artisan", "message": "ಕ್ಷಮಿಸಿ, ಕಚ್ಚಾ ಕಂಚಿನ ವೆಚ್ಚಕ್ಕಿಂತ ಕಡಿಮೆಯಿರುವುದರಿಂದ ಸಾಧ್ಯವಿಲ್ಲ.", "proposed_price": null }
+      ]
+    },
+    {
+      "id": "demo-enq-212",
+      "product_id": "demo-prod-006",
+      "quantity": 3,
+      "proposed_price": 8400,
+      "counter_price": 9000,
+      "status": "confirmed",
+      "notes": "Sandalwood carvings for anniversary gifts.",
+      "is_demo": true,
+      "messages": [
+        { "sender_role": "customer", "message": "3 authentic sandalwood Ganeshas for ₹8,400?", "proposed_price": 8400 },
+        { "sender_role": "artisan", "message": "Can prepare with Forest Dept certified wood for ₹9,000.", "proposed_price": 9000 }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "id": "demo-rev-301",
+      "product_id": "demo-prod-001",
+      "rating": 5,
+      "review_text": "Beautiful lacquer finish and completely smooth edges. My daughter loves playing with this rocking horse!",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-302",
+      "product_id": "demo-prod-002",
+      "rating": 5,
+      "review_text": "True master craftsmanship. The silver inlay work is astonishingly intricate. Proud to display it.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-303",
+      "product_id": "demo-prod-003",
+      "rating": 5,
+      "review_text": "ತುಂಬಾ ಸುಂದರವಾದ ಅಸಲಿ ಮೈಸೂರು ರೇಷ್ಮೆ ಸೀರೆ. ಜರಿ ಹೊಳಪು ಅತ್ಯುತ್ತಮವಾಗಿದೆ.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-304",
+      "product_id": "demo-prod-004",
+      "rating": 4,
+      "review_text": "Water stays naturally chill and fresh. The clay scent brings back village memories.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-305",
+      "product_id": "demo-prod-005",
+      "rating": 5,
+      "review_text": "Sturdy bamboo weave and very light to carry. Eco-friendly and functional.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-306",
+      "product_id": "demo-prod-004",
+      "rating": 2,
+      "review_text": "Small hairline scratch on base and arrived two days late. Needs sturdier outer carton.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-307",
+      "product_id": "demo-prod-008",
+      "rating": 5,
+      "review_text": "Heavy pure brass lamp with rich golden luster. Looks magnificent in our puja room.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-308",
+      "product_id": "demo-prod-015",
+      "rating": 5,
+      "review_text": "Non-toxic vegetable colors are completely safe for my toddler. Wonderful toy!",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-309",
+      "product_id": "demo-prod-006",
+      "rating": 5,
+      "review_text": "Divine natural fragrance of pure sandalwood. Intricate craftsmanship on the ears and crown.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-310",
+      "product_id": "demo-prod-007",
+      "rating": 4,
+      "review_text": "Authentic Kasuti needlework. Color fastness after wash is very good.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-311",
+      "product_id": "demo-prod-009",
+      "rating": 4,
+      "review_text": "Hand-painted clay plate looks stunning on our entryway wall. Truly unique rustic piece.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-312",
+      "product_id": "demo-prod-010",
+      "rating": 5,
+      "review_text": "The gold foil accents on the Kinnal cow figurine are exceptional. Very well packed.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-313",
+      "product_id": "demo-prod-011",
+      "rating": 4,
+      "review_text": "Chai tastes so much better in these natural unglazed cups. Fast delivery.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-314",
+      "product_id": "demo-prod-012",
+      "rating": 3,
+      "review_text": "Nice clay earrings, but earring stud back was a bit loose. Can be improved.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-315",
+      "product_id": "demo-prod-013",
+      "rating": 4,
+      "review_text": "Strong natural fiber jute runner. Lies completely flat and does not slip.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-316",
+      "product_id": "demo-prod-014",
+      "rating": 5,
+      "review_text": "Soft cotton weave and breathable fabric. Authentic North Karnataka weaving heritage.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-317",
+      "product_id": "demo-prod-016",
+      "rating": 5,
+      "review_text": "Rustic antique finish on the Dhokra bronze musician. High artistic value.",
+      "is_demo": true
+    },
+    {
+      "id": "demo-rev-318",
+      "product_id": "demo-prod-005",
+      "rating": 2,
+      "review_text": "The outer packaging was torn in transit and one edge was slightly bent. Please use bubble wrap.",
+      "is_demo": true
+    }
+  ]
+}
