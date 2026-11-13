@@ -33,37 +33,60 @@ export function AuthProvider({ children }) {
     let mounted = true;
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        setUser(session.user);
-        fetchProfile(session.user.id).then(() => {
-          if (mounted) setLoading(false);
-        });
-      } else {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data } = {}) => {
+        if (!mounted) return;
+        const session = data?.session;
+        if (session?.user) {
+          setUser(session.user);
+          fetchProfile(session.user.id).finally(() => {
+            if (mounted) setLoading(false);
+          });
+        } else {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Unable to get session from Supabase:', err?.message || err);
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
+      });
 
     // Listen to authentication changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      
-      if (session?.user) {
-        setUser(session.user);
-        await fetchProfile(session.user.id);
-      } else {
-        setUser(null);
-        setProfile(null);
-      }
-      setLoading(false);
-    });
+    let subscription = null;
+    try {
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted) return;
+
+        try {
+          if (session?.user) {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          } else {
+            setUser(null);
+            setProfile(null);
+          }
+        } catch (err) {
+          console.warn('Error handling auth state change:', err?.message || err);
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      });
+      subscription = data?.subscription;
+    } catch (err) {
+      console.warn('Failed to register auth state change listener:', err?.message || err);
+      if (mounted) setLoading(false);
+    }
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe?.();
     };
   }, []);
 

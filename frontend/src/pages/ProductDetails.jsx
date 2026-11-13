@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useCart } from '../lib/CartContext';
 import { createNotification } from '../lib/notifications';
+import StarRating from '../components/reviews/StarRating';
+import ProductReviewsSection from '../components/reviews/ProductReviewsSection';
 import VerifyBadge from '../components/VerifyBadge';
 
 // Clean English description for marketplace, stripping legacy concatenated bilingual portions
@@ -57,10 +59,6 @@ export default function ProductDetails() {
   const [quantity, setQuantity] = useState(1);
   const [qtyError, setQtyError] = useState('');
   const [cartSuccess, setCartSuccess] = useState(false);
-
-  // Reviews state
-  const [reviews, setReviews] = useState([]);
-  const [loadingReviews, setLoadingReviews] = useState(true);
 
   // Enquiry modal and submission states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -286,6 +284,8 @@ export default function ProductDetails() {
             price,
             stock_quantity,
             status,
+            average_rating,
+            review_count,
             created_at,
             categories (
               name
@@ -324,6 +324,8 @@ export default function ProductDetails() {
               price,
               stock_quantity,
               status,
+              average_rating,
+              review_count,
               created_at,
               categories (
                 name
@@ -424,50 +426,6 @@ export default function ProductDetails() {
 
     if (id) {
       loadProductDetails();
-    }
-
-    return () => {
-      active = false;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadReviews() {
-      try {
-        setLoadingReviews(true);
-        const { data, error: reviewsErr } = await supabase
-          .from('product_reviews')
-          .select(`
-            id,
-            rating,
-            review_text,
-            photo_url,
-            created_at,
-            profiles (
-              full_name
-            )
-          `)
-          .eq('product_id', id)
-          .order('created_at', { ascending: false });
-
-        if (reviewsErr) throw reviewsErr;
-
-        if (active) {
-          setReviews(data || []);
-        }
-      } catch (err) {
-        console.error('Error fetching product reviews:', err);
-      } finally {
-        if (active) {
-          setLoadingReviews(false);
-        }
-      }
-    }
-
-    if (id) {
-      loadReviews();
     }
 
     return () => {
@@ -698,6 +656,30 @@ export default function ProductDetails() {
                   <span className="inline-flex items-center gap-1 font-bold text-sm text-red-600">
                     <span>✕</span> Out of Stock (Custom order available)
                   </span>
+                )}
+              </div>
+
+              {/* Star Rating Quick Summary */}
+              <div className="pt-1.5">
+                {product.average_rating > 0 ? (
+                  <a
+                    href="#reviews-section"
+                    className="inline-flex items-center gap-2 hover:opacity-85 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-gov-navy rounded"
+                    title="Jump to verified customer reviews"
+                  >
+                    <StarRating rating={Number(product.average_rating)} size="sm" showScore />
+                    <span className="text-xs font-semibold text-slate-500 hover:text-gov-navy underline">
+                      ({product.review_count} {product.review_count === 1 ? 'customer review' : 'customer reviews'})
+                    </span>
+                  </a>
+                ) : (
+                  <a
+                    href="#reviews-section"
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-gov-navy transition-colors"
+                  >
+                    <span className="text-amber-500 font-bold">★</span>
+                    <span className="font-semibold underline">Be the first to review this product</span>
+                  </a>
                 )}
               </div>
             </div>
@@ -1135,84 +1117,12 @@ export default function ProductDetails() {
         </div>
       )}
 
-      {/* Reviews & Ratings Showcase */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-xl font-bold text-gov-navy m-0 flex items-center gap-2">
-              <span>⭐️</span> Customer Reviews & Experiences ({reviews.length})
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Verified reviews from verified buyers</p>
-          </div>
-        </div>
-
-        {loadingReviews ? (
-          <div className="flex items-center gap-2 text-slate-500 text-sm py-4">
-            <div className="w-5 h-5 border-2 border-gov-navy border-t-transparent rounded-full animate-spin"></div>
-            <span>Loading authentic customer reviews...</span>
-          </div>
-        ) : reviews.length === 0 ? (
-          <div className="text-center py-8 space-y-2 bg-slate-50 rounded-lg border border-slate-150">
-            <span className="text-4xl block">✨</span>
-            <p className="text-sm font-semibold text-slate-700 m-0">No reviews yet for this piece</p>
-            <p className="text-xs text-slate-500 m-0">Be the first to purchase and review this verified artisan handicraft!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Reviews Summary Stats */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 h-fit text-center space-y-3">
-              <div className="text-5xl font-black text-slate-900">
-                {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
-              </div>
-              <div className="text-amber-500 font-bold text-xl select-none">
-                {'★'.repeat(Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)) +
-                  '☆'.repeat(5 - Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length))}
-              </div>
-              <p className="text-xs text-slate-500 uppercase font-bold tracking-wider m-0">
-                Based on {reviews.length} {reviews.length === 1 ? 'Review' : 'Reviews'}
-              </p>
-            </div>
-
-            {/* Individual Reviews List */}
-            <div className="md:col-span-2 space-y-4 divide-y divide-slate-100 max-h-[460px] overflow-y-auto pr-2">
-              {reviews.map((rev, index) => (
-                <div key={rev.id} className={`${index > 0 ? 'pt-4' : ''} space-y-2`}>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="font-bold text-sm text-slate-900 block">
-                        {rev.profiles?.full_name || 'Verified Buyer'}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {new Date(rev.created_at).toLocaleDateString('en-IN', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </span>
-                    </div>
-                    <div className="text-amber-500 font-bold text-sm select-none">
-                      {'★'.repeat(rev.rating) + '☆'.repeat(5 - rev.rating)}
-                    </div>
-                  </div>
-
-                  {rev.review_text && (
-                    <p className="text-xs text-slate-700 leading-relaxed m-0 font-sans">
-                      {rev.review_text}
-                    </p>
-                  )}
-
-                  {rev.photo_url && (
-                    <img
-                      src={rev.photo_url}
-                      alt="Customer review photo"
-                      className="w-24 h-24 object-cover rounded-lg border border-slate-200 mt-2 shadow-2xs hover:scale-105 transition-transform"
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      {/* Customer Reviews and Ratings Section */}
+      <div id="reviews-section">
+        <ProductReviewsSection
+          productId={product.id}
+          productName={product.name}
+        />
       </div>
     </div>
   );
