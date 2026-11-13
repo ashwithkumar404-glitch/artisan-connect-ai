@@ -3,6 +3,7 @@ import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../lib/CartContext';
 import { useAuth } from '../lib/AuthContext';
+import StarRating from '../components/reviews/StarRating';
 
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -17,6 +18,7 @@ export default function Explore() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
   const categories = [
     'All',
@@ -107,7 +109,14 @@ export default function Explore() {
       } catch (err) {
         console.error('Error fetching explore products:', err);
         if (active) {
-          setError(err.message || 'Failed to load products list.');
+          const isNetworkErr =
+            err?.message?.includes('Failed to fetch') ||
+            err?.message?.includes('fetch failed') ||
+            err?.name === 'TypeError';
+          const friendlyMsg = isNetworkErr
+            ? 'Unable to connect to the product catalog database. Please verify your internet connection or try again.'
+            : (err?.message || 'Failed to load products list.');
+          setError(friendlyMsg);
         }
       } finally {
         if (active) {
@@ -121,7 +130,7 @@ export default function Explore() {
     return () => {
       active = false;
     };
-  }, [searchTerm, selectedCategory, sortBy]);
+  }, [searchTerm, selectedCategory, sortBy, retryCount]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
@@ -272,9 +281,18 @@ export default function Explore() {
           <p className="text-sm font-semibold text-slate-500">Loading handicrafts...</p>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-300 text-red-800 rounded p-4 text-sm font-semibold flex items-center gap-3">
-          <span className="text-2xl">⚠️</span>
-          <div>{error}</div>
+        <div className="bg-red-50 border border-red-300 text-red-800 rounded-lg p-5 text-sm font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl" role="img" aria-label="Error alert">⚠️</span>
+            <div>{error}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRetryCount((c) => c + 1)}
+            className="px-4 py-2 bg-gov-navy hover:bg-gov-navy-light text-white text-xs font-bold rounded transition-colors cursor-pointer self-start sm:self-auto shrink-0 min-h-[36px]"
+          >
+            Retry Connection
+          </button>
         </div>
       ) : filteredProducts.length === 0 ? (
         <div className="border border-dashed border-slate-350 bg-slate-50 rounded-lg p-12 text-center max-w-4xl mx-auto">
@@ -328,11 +346,15 @@ export default function Explore() {
                       <span className="text-[9px] uppercase font-extrabold tracking-wider text-gov-saffron">
                         {categoryName}
                       </span>
-                      {product.average_rating > 0 && (
-                        <span className="text-xs font-bold text-amber-600 flex items-center gap-0.5">
-                          ⭐ {Number(product.average_rating).toFixed(1)}
-                          <span className="text-[10px] text-slate-400 font-normal">({product.review_count})</span>
-                        </span>
+                      {product.average_rating > 0 ? (
+                        <StarRating
+                          rating={Number(product.average_rating)}
+                          size="sm"
+                          showScore
+                          showCount={product.review_count}
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">New</span>
                       )}
                     </div>
                     <Link to={`/product/${product.id}`} className="block">
