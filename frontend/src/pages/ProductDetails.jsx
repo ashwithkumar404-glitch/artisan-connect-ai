@@ -6,9 +6,9 @@ import { useCart } from '../lib/CartContext';
 import { createNotification } from '../lib/notifications';
 import StarRating from '../components/reviews/StarRating';
 import ProductReviewsSection from '../components/reviews/ProductReviewsSection';
+import VerifyBadge from '../components/VerifyBadge';
 
 // Clean English description for marketplace, stripping legacy concatenated bilingual portions
-// Parse embedded Kannada listing text if present in legacy/fallback concatenated description
 function parseEmbeddedKannadaListing(desc) {
   if (!desc) return { localTitle: null, localDescription: null };
   const sepIdx = desc.indexOf('\n\n---\n');
@@ -53,9 +53,11 @@ export default function ProductDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeDescLang, setActiveDescLang] = useState('en');
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  // Cart operations
+  // Cart operations & Quantity Selection
   const [quantity, setQuantity] = useState(1);
+  const [qtyError, setQtyError] = useState('');
   const [cartSuccess, setCartSuccess] = useState(false);
 
   // Enquiry modal and submission states
@@ -71,13 +73,32 @@ export default function ProductDetails() {
   const [enquirySuccess, setEnquirySuccess] = useState(false);
   const [enquiryError, setEnquiryError] = useState('');
 
-  const handleEnquiryClick = () => {
-    console.log("Send Enquiry clicked");
-    console.log("Current auth user:", user);
-    console.log("Current role:", profile?.role);
-    console.log("Product loaded for enquiry:", product);
-    console.log("Product artisan_id:", product?.artisan_id);
+  // Handle quantity changes with validation
+  const handleQuantityChange = (newVal) => {
+    setQtyError('');
+    const maxStock = product?.stock_quantity ?? 0;
 
+    if (maxStock === 0) {
+      setQuantity(0);
+      setQtyError('This product is currently out of stock.');
+      return;
+    }
+
+    if (isNaN(newVal) || newVal < 1) {
+      setQuantity(1);
+      return;
+    }
+
+    if (newVal > maxStock) {
+      setQuantity(maxStock);
+      setQtyError(`Only ${maxStock} items available in workshop stock.`);
+      return;
+    }
+
+    setQuantity(newVal);
+  };
+
+  const handleEnquiryClick = () => {
     setEnquiryError('');
     setEnquirySuccess(false);
 
@@ -86,7 +107,7 @@ export default function ProductDetails() {
       return;
     }
     if (!product?.artisan_id) {
-      setEnquiryError('Unable to contact the artisan because this product is missing its artisan information.');
+      setEnquiryError('Unable to contact the artisan because this product is missing artisan information.');
       return;
     }
     setIsEnquiryModalOpen(true);
@@ -95,7 +116,19 @@ export default function ProductDetails() {
   const handleEnquirySubmit = async (e) => {
     e.preventDefault();
     if (!enquiryMessage.trim()) {
-      setEnquiryError('Please enter a message before sending.');
+      setEnquiryError('Please enter a detailed message or design request for the artisan.');
+      return;
+    }
+
+    const qtyNum = enquiryQty ? parseInt(enquiryQty, 10) : null;
+    if (enquiryQty && (isNaN(qtyNum) || qtyNum <= 0)) {
+      setEnquiryError('Please enter a valid quantity of 1 or more.');
+      return;
+    }
+
+    const budgetNum = enquiryBudget ? parseFloat(enquiryBudget) : null;
+    if (enquiryBudget && (isNaN(budgetNum) || budgetNum <= 0)) {
+      setEnquiryError('Please enter a valid budget amount in ₹.');
       return;
     }
 
@@ -108,7 +141,7 @@ export default function ProductDetails() {
       }
 
       if (!product || !product.artisan_id) {
-        throw new Error('Unable to contact the artisan because this product is missing its artisan information.');
+        throw new Error('Unable to contact the artisan because this product is missing artisan information.');
       }
 
       let referenceImageUrl = null;
@@ -138,9 +171,6 @@ export default function ProductDetails() {
         }
       }
 
-      const qtyNum = enquiryQty ? parseInt(enquiryQty) : null;
-      const budgetNum = enquiryBudget ? parseFloat(enquiryBudget) : null;
-
       const { data: insertedEnquiry, error: insertError } = await supabase
         .from('enquiries')
         .insert({
@@ -164,7 +194,7 @@ export default function ProductDetails() {
         throw insertError;
       }
 
-      // Initialize conversation thread in enquiry_messages if supported
+      // Initialize conversation thread in enquiry_messages
       if (insertedEnquiry?.id) {
         try {
           const qty = qtyNum || 1;
@@ -194,7 +224,7 @@ export default function ProductDetails() {
             admin.id,
             'enquiry_submitted',
             'New Enquiry Received',
-            `A customer submitted a custom design request for "${product.name}".`,
+            `A customer submitted an enquiry for "${product.name}".`,
             product.id,
             'enquiry'
           )
@@ -209,7 +239,7 @@ export default function ProductDetails() {
             product.artisans.profile_id,
             'enquiry_received',
             'New Custom Order Enquiry',
-            `A customer submitted an enquiry for "${product.name}"${enquiryQty ? ` (Qty: ${enquiryQty})` : ''}.`,
+            `A customer submitted an enquiry for "${product.name}"${qtyNum ? ` (Qty: ${qtyNum})` : ''}.`,
             product.id,
             'enquiry'
           );
@@ -261,13 +291,18 @@ export default function ProductDetails() {
               name
             ),
             product_images (
-              image_url
+              id,
+              image_url,
+              display_order
             ),
             artisans (
               id,
               profile_id,
               business_name,
+              bio,
               location,
+              specialization,
+              experience_years,
               verification_status,
               profiles (
                 full_name
@@ -296,12 +331,53 @@ export default function ProductDetails() {
                 name
               ),
               product_images (
-                image_url
+                id,
+                image_url,
+                display_order
               ),
               artisans (
                 id,
                 profile_id,
-              business_name,
+                business_name,
+                bio,
+                location,
+                specialization,
+                experience_years,
+                verification_status,
+                profiles (
+                  full_name
+                )
+              )
+            `)
+            .eq('id', id)
+            .maybeSingle();
+        }
+
+        // Secondary fallback if artisan columns differ
+        if (productRes.error && (productRes.error.message?.includes('bio') || productRes.error.message?.includes('specialization') || productRes.error.message?.includes('experience_years'))) {
+          productRes = await supabase
+            .from('products')
+            .select(`
+              id,
+              artisan_id,
+              name,
+              description,
+              price,
+              stock_quantity,
+              status,
+              created_at,
+              categories (
+                name
+              ),
+              product_images (
+                id,
+                image_url,
+                display_order
+              ),
+              artisans (
+                id,
+                profile_id,
+                business_name,
                 location,
                 verification_status,
                 profiles (
@@ -330,10 +406,10 @@ export default function ProductDetails() {
 
         if (active) {
           if (!data || data.status !== 'published' || data.artisans?.verification_status !== 'approved') {
-            // Secure boundary check: do not return any draft product or unverified artisan product data
             setProduct(null);
           } else {
             setProduct(data);
+            setSelectedImageIndex(0);
           }
         }
       } catch (err) {
@@ -359,9 +435,9 @@ export default function ProductDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-4">
-        <div className="w-10 h-10 border-4 border-gov-navy border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-semibold text-slate-500 font-sans">Loading product details...</p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-gov-navy border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-semibold text-slate-500 font-sans">Loading authentic handicraft details...</p>
       </div>
     );
   }
@@ -369,13 +445,13 @@ export default function ProductDetails() {
   if (error) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <div className="bg-red-50 border border-red-300 text-red-800 rounded p-4 text-sm font-semibold inline-flex items-center gap-3">
+        <div className="bg-red-50 border border-red-300 text-red-800 rounded-lg p-5 text-sm font-semibold inline-flex items-center gap-3 shadow-sm">
           <span className="text-2xl">⚠️</span>
           <div>{error}</div>
         </div>
         <div className="pt-4">
-          <Link to="/explore" className="text-gov-navy font-bold hover:underline">
-            ← Back to Explore Page
+          <Link to="/explore" className="text-gov-navy font-bold hover:underline inline-flex items-center gap-1.5">
+            ← Back to Explore Marketplace
           </Link>
         </div>
       </div>
@@ -385,19 +461,19 @@ export default function ProductDetails() {
   if (!product) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center space-y-6">
-        <div className="w-16 h-16 bg-amber-50 border border-amber-300 rounded-full flex items-center justify-center mx-auto shadow-inner text-amber-600">
-          <span className="text-3xl" role="img" aria-label="Shield lock icon">🛡️</span>
+        <div className="w-20 h-20 bg-amber-50 border border-amber-300 rounded-full flex items-center justify-center mx-auto shadow-inner text-amber-600">
+          <span className="text-4xl" role="img" aria-label="Shield lock icon">🛡️</span>
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-bold text-slate-800">Product Not Available</h2>
-          <p className="text-slate-550 text-sm leading-relaxed">
-            The product you are trying to view is either currently unavailable, still in draft status, or does not exist.
+          <h2 className="text-2xl font-bold text-slate-800">Handicraft Unavailable</h2>
+          <p className="text-slate-600 text-sm leading-relaxed">
+            The product you are trying to view is either currently unavailable, pending artisan verification, or has been removed.
           </p>
         </div>
-        <div className="pt-4">
+        <div className="pt-2">
           <Link to="/explore">
-            <button className="bg-gov-navy hover:bg-gov-navy-light text-white text-sm font-bold px-5 py-2.5 rounded transition-colors cursor-pointer min-h-[40px] shadow-sm">
-              ← Back to Explore Handicrafts
+            <button className="bg-gov-navy hover:bg-gov-navy-light text-white text-sm font-bold px-6 py-3 rounded-lg transition-colors cursor-pointer shadow-sm">
+              ← Browse Verified Handicrafts
             </button>
           </Link>
         </div>
@@ -405,31 +481,59 @@ export default function ProductDetails() {
     );
   }
 
-  const imageUrl = product.product_images && product.product_images.length > 0
-    ? product.product_images[0].image_url
+  const allImages = product.product_images && product.product_images.length > 0
+    ? [...product.product_images].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+    : [];
+
+  const mainImageUrl = allImages.length > 0 && allImages[selectedImageIndex]
+    ? allImages[selectedImageIndex].image_url
     : null;
-  const categoryName = product.categories?.name || 'Uncategorized';
-  const artisanName = product.artisans?.business_name || product.artisans?.profiles?.full_name || 'Unknown Artisan';
-  const locationName = product.artisans?.location || 'Unknown Location';
+
+  const categoryName = product.categories?.name || 'Traditional Craft';
+  const artisanName = product.artisans?.business_name || product.artisans?.profiles?.full_name || 'Master Artisan';
+  const locationName = product.artisans?.location || 'India';
+  const artisanBio = product.artisans?.bio;
+  const specialization = product.artisans?.specialization || categoryName;
+  const experienceYears = product.artisans?.experience_years;
+  const unitPrice = Number(product.price) || 0;
+  const inStock = (product.stock_quantity ?? 0) > 0;
+
+  // Bulk Enquiry Calculations
+  const bulkQtyNum = enquiryQty ? parseInt(enquiryQty, 10) : 0;
+  const bulkBudgetNum = enquiryBudget ? parseFloat(enquiryBudget) : 0;
+  const bulkListEstimate = bulkQtyNum > 0 ? unitPrice * bulkQtyNum : 0;
+  const bulkUnitRate = bulkQtyNum > 0 && bulkBudgetNum > 0 ? (bulkBudgetNum / bulkQtyNum) : 0;
+  const budgetDifference = bulkBudgetNum > 0 && bulkListEstimate > 0 ? bulkBudgetNum - bulkListEstimate : 0;
+  const percentDiff = bulkListEstimate > 0 && bulkBudgetNum > 0 ? ((budgetDifference / bulkListEstimate) * 100) : 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 animate-fade-in">
-      <div>
-        <Link to="/explore" className="text-sm font-bold text-slate-500 hover:text-gov-navy transition-colors">
-          ← Back to Explore Handicrafts
-        </Link>
-      </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+      {/* Breadcrumb & Navigation */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-medium">
+        <Link to="/" className="hover:text-gov-navy transition-colors">Home</Link>
+        <span>/</span>
+        <Link to="/explore" className="hover:text-gov-navy transition-colors">Explore</Link>
+        <span>/</span>
+        <span className="text-slate-400">{categoryName}</span>
+        <span>/</span>
+        <span className="text-slate-900 font-bold truncate max-w-[200px] sm:max-w-xs">{product.name}</span>
+      </nav>
 
-      {/* Success Notification */}
+      {/* Global Success Banner for Enquiry */}
       {enquirySuccess && (
-        <div className="bg-green-50 border border-green-300 text-green-800 rounded p-4 text-sm font-semibold flex items-center justify-between animate-fade-in">
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-lg p-4 text-sm font-semibold flex items-center justify-between shadow-xs animate-fade-in">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">✅</span>
-            <div>Your enquiry was sent successfully! The artisan will contact you shortly.</div>
+            <span className="text-2xl">🎉</span>
+            <div>
+              <div className="font-bold">Enquiry sent successfully to {artisanName}!</div>
+              <div className="text-xs text-emerald-700 font-normal mt-0.5">
+                You can track artisan replies and negotiate in your <Link to="/profile?tab=enquiries" className="underline font-bold text-emerald-800">Buyer Profile → Enquiries</Link>.
+              </div>
+            </div>
           </div>
-          <button 
-            onClick={() => setEnquirySuccess(false)} 
-            className="text-green-600 hover:text-green-800 font-bold px-2 cursor-pointer"
+          <button
+            onClick={() => setEnquirySuccess(false)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold px-2 py-1 cursor-pointer"
             aria-label="Dismiss success message"
           >
             ✕
@@ -437,47 +541,122 @@ export default function ProductDetails() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-sm">
-        {/* Product Image Column */}
-        <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center p-4 min-h-[300px] md:min-h-[450px]">
-          {imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={product.name}
-              className="max-h-[400px] object-contain rounded shadow-sm border border-slate-100 bg-white"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' class='w-20 h-20'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/%3E%3C/svg%3E";
-              }}
-            />
-          ) : (
-            <div className="text-center space-y-2">
-              <span className="text-5xl block text-slate-400" role="img" aria-label="package placeholder icon">📦</span>
-              <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400">No Image Available</span>
+      {/* Main Product Showcase Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white border border-slate-200 rounded-xl p-6 sm:p-8 lg:p-10 shadow-sm">
+
+        {/* Left Column: Image Gallery (5 cols on lg) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center p-4 min-h-[320px] sm:min-h-[420px] relative group">
+            {mainImageUrl ? (
+              <img
+                src={mainImageUrl}
+                alt={product.name}
+                className="max-h-[380px] w-auto max-w-full object-contain rounded-lg transition-transform duration-200 group-hover:scale-102"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' class='w-20 h-20'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/%3E%3C/svg%3E";
+                }}
+              />
+            ) : (
+              <div className="text-center space-y-2 py-12">
+                <span className="text-6xl block text-slate-300" role="img" aria-label="handicraft icon">📦</span>
+                <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400">Authentic Handcrafted Piece</span>
+              </div>
+            )}
+
+            {/* Verification Watermark Badge */}
+            <div className="absolute top-3 left-3">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/90 backdrop-blur-xs text-[11px] font-bold text-gov-navy shadow-xs border border-slate-200">
+                <span>🛡️</span> Verified Artisan Direct
+              </span>
+            </div>
+          </div>
+
+          {/* Multiple Image Thumbnails */}
+          {allImages.length > 1 && (
+            <div className="flex gap-2.5 overflow-x-auto pb-1">
+              {allImages.map((img, idx) => (
+                <button
+                  key={img.id || idx}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(idx)}
+                  className={`w-16 h-16 rounded-lg border-2 overflow-hidden bg-slate-50 flex-shrink-0 cursor-pointer transition-all ${
+                    selectedImageIndex === idx ? 'border-gov-navy ring-2 ring-gov-navy/20 shadow-xs scale-105' : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
             </div>
           )}
+
+          {/* Artisan Trust Highlights */}
+          <div className="grid grid-cols-2 gap-3 pt-2 text-xs text-slate-600">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-2.5">
+              <span className="text-xl">🌿</span>
+              <div>
+                <span className="font-bold text-slate-800 block">Eco-Friendly Craft</span>
+                <span className="text-[10px] text-slate-500">Natural traditional materials</span>
+              </div>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-2.5">
+              <span className="text-xl">🤝</span>
+              <div>
+                <span className="font-bold text-slate-800 block">Direct Fair Pricing</span>
+                <span className="text-[10px] text-slate-500">100% supports the artisan</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Product Details Column */}
-        <div className="flex flex-col justify-between space-y-6">
+        {/* Right Column: Information, Pricing, & Actions (7 cols on lg) */}
+        <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
           <div className="space-y-4">
-            {/* Category Tag */}
-            <span className="inline-block bg-amber-50 border border-amber-300 text-gov-saffron font-extrabold text-[11px] uppercase tracking-wider px-2.5 py-1 rounded">
-              {categoryName}
-            </span>
 
-            {/* Title & Price */}
-            <div className="space-y-1">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 m-0">
+            {/* Header Badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-block bg-amber-50 border border-amber-300 text-gov-saffron font-extrabold text-[11px] uppercase tracking-wider px-3 py-1 rounded-md">
+                {categoryName}
+              </span>
+              <VerifyBadge status={product.artisans?.verification_status || 'approved'} />
+            </div>
+
+            {/* Product Title */}
+            <div>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
                 {product.name}
               </h1>
               {product.local_title && product.local_title !== product.name && (
-                <div className="text-sm font-semibold text-slate-500 pt-0.5">
+                <div className="text-base font-semibold text-slate-500 pt-1">
                   {product.local_title}
                 </div>
               )}
-              <div className="text-2xl sm:text-3xl font-black text-gov-navy pt-2">
-                ₹{Number(product.price).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+
+            {/* Price & Stock Urgency */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-baseline justify-between gap-4">
+              <div>
+                <span className="text-xs font-semibold text-slate-450 uppercase tracking-wider block">Direct Artisan Price</span>
+                <div className="text-3xl sm:text-4xl font-black text-gov-navy">
+                  ₹{unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium">Inclusive of all local craft taxes & handmade packaging</span>
+              </div>
+
+              <div className="text-right">
+                <span className="text-xs font-semibold text-slate-450 uppercase tracking-wider block">Workshop Stock</span>
+                {inStock ? (
+                  <span className={`inline-flex items-center gap-1.5 font-bold text-sm ${product.stock_quantity <= 3 ? 'text-amber-600' : 'text-emerald-700'}`}>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    {product.stock_quantity <= 3
+                      ? `Only ${product.stock_quantity} pieces left!`
+                      : `${product.stock_quantity} pieces available`}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 font-bold text-sm text-red-600">
+                    <span>✕</span> Out of Stock (Custom order available)
+                  </span>
+                )}
               </div>
 
               {/* Star Rating Quick Summary */}
@@ -505,18 +684,16 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            <hr className="border-slate-200" />
-
-            {/* Description */}
-            <div className="space-y-1.5">
+            {/* Bilingual Product Description */}
+            <div className="space-y-2 border-t border-slate-200 pt-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-800 text-sm">Product Description</h3>
+                <h2 className="font-bold text-slate-800 text-sm tracking-wide uppercase">Craft Description</h2>
                 {product.local_description && (
-                  <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded border border-slate-200">
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200">
                     <button
                       type="button"
                       onClick={() => setActiveDescLang('en')}
-                      className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded cursor-pointer transition-colors ${
                         activeDescLang === 'en' ? 'bg-gov-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -525,7 +702,7 @@ export default function ProductDetails() {
                     <button
                       type="button"
                       onClick={() => setActiveDescLang('local')}
-                      className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded cursor-pointer transition-colors ${
                         activeDescLang === 'local' ? 'bg-gov-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -534,83 +711,134 @@ export default function ProductDetails() {
                   </div>
                 )}
               </div>
-              <p className="text-slate-655 text-sm leading-relaxed whitespace-pre-line">
+              <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line font-normal">
                 {activeDescLang === 'local' && product.local_description
                   ? product.local_description
-                  : getCleanEnglishDescription(product.description) || product.local_description || 'No description provided for this handicraft.'}
+                  : getCleanEnglishDescription(product.description) || product.local_description || 'Authentic traditional handicraft crafted with natural indigenous materials.'}
               </p>
             </div>
-          </div>
 
-          {/* Artisan & Availability Info */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-3.5">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white rounded-full border border-slate-250 flex items-center justify-center text-3xl shadow-sm select-none">
-                👨‍🎨
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Handcrafted by:</span>
-                <span className="font-bold text-slate-900 text-base">{artisanName}</span>
+            {/* Product Specifications Table */}
+            <div className="border-t border-slate-200 pt-4 space-y-2.5">
+              <h2 className="font-bold text-slate-800 text-sm tracking-wide uppercase">Handicraft Specifications</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3.5">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Category</span>
+                  <span className="font-semibold text-slate-800">{categoryName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Technique</span>
+                  <span className="font-semibold text-slate-800">100% Hand-Crafted</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Material Focus</span>
+                  <span className="font-semibold text-slate-800">{specialization}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Craft Region</span>
+                  <span className="font-semibold text-slate-800">{locationName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Artisan Experience</span>
+                  <span className="font-semibold text-slate-800">
+                    {experienceYears ? `${experienceYears} Years Traditional Mastery` : 'Generational Artisan'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Dispatch Timeline</span>
+                  <span className="font-semibold text-slate-800">Ready in 2–4 Business Days</span>
+                </div>
               </div>
             </div>
-            
-            <div className="grid grid-cols-2 gap-4 text-xs pt-3 border-t border-slate-200">
-              <div>
-                <span className="text-slate-450 block font-semibold mb-0.5">Location:</span>
-                <span className="font-bold text-slate-800">{locationName || 'Not Provided'}</span>
-              </div>
-              <div>
-                <span className="text-slate-450 block font-semibold mb-0.5">Stock Status:</span>
-                <span className={`font-bold ${product.stock_quantity > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                  {product.stock_quantity > 0 ? `${product.stock_quantity} Items Left` : 'Out of stock'}
+
+            {/* Artisan Information & Craft Story Card */}
+            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-5 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white rounded-full border border-amber-200 flex items-center justify-center text-2xl shadow-xs">
+                    👨‍🎨
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-800 block">Artisan Workshop</span>
+                    <span className="font-bold text-slate-900 text-base">{artisanName}</span>
+                    <span className="text-xs text-slate-600 block">{locationName}</span>
+                  </div>
+                </div>
+                <span className="text-xs bg-white text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-full shadow-2xs">
+                  {specialization}
                 </span>
               </div>
+
+              {artisanBio && (
+                <div className="text-xs text-slate-700 italic border-l-2 border-amber-400 pl-3 py-1 font-serif leading-relaxed">
+                  "{artisanBio}"
+                </div>
+              )}
             </div>
+
           </div>
 
-          {/* Action buttons */}
+          {/* Action Center: Quantity Stepper & Buy Buttons */}
           <div className="space-y-4 pt-4 border-t border-slate-200">
-            {/* Quantity Selector */}
-            {product.stock_quantity > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-700">Quantity</span>
-                <div className="flex items-center border border-slate-350 rounded overflow-hidden bg-slate-50 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold text-base min-h-[40px]"
-                    aria-label="Decrease quantity"
-                  >
-                    －
-                  </button>
-                  <span className="px-4 text-sm font-bold text-slate-800 bg-white min-w-[38px] text-center py-1.5 select-none">
-                    {quantity}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setQuantity(q => Math.min(product.stock_quantity ?? 0, q + 1))}
-                    disabled={quantity >= (product.stock_quantity ?? 0)}
-                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold text-base min-h-[40px] disabled:opacity-40 disabled:cursor-not-allowed"
-                    aria-label="Increase quantity"
-                  >
-                    ＋
-                  </button>
+            {/* Quantity Stepper with Inline Validation */}
+            {inStock && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="pdetails-qty" className="text-sm font-bold text-slate-800">Select Quantity</label>
+                  <span className="text-xs text-slate-500 font-medium">Subtotal: ₹{(quantity * unitPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => handleQuantityChange(quantity - 1)}
+                      disabled={quantity <= 1}
+                      className="px-4 py-2 text-slate-700 hover:bg-slate-100 font-bold text-base min-h-[44px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Decrease quantity"
+                    >
+                      －
+                    </button>
+                    <input
+                      id="pdetails-qty"
+                      type="number"
+                      min="1"
+                      max={product.stock_quantity ?? 1}
+                      value={quantity}
+                      onChange={(e) => handleQuantityChange(parseInt(e.target.value, 10) || 1)}
+                      className="w-16 text-center text-sm font-bold text-slate-900 py-2 border-x border-slate-300 focus:outline-none focus:bg-slate-50"
+                      aria-label="Product quantity"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleQuantityChange(quantity + 1)}
+                      disabled={quantity >= (product.stock_quantity ?? 1)}
+                      className="px-4 py-2 text-slate-700 hover:bg-slate-100 font-bold text-base min-h-[44px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Increase quantity"
+                    >
+                      ＋
+                    </button>
+                  </div>
+
+                  <span className="text-xs text-slate-500">Max {product.stock_quantity} per order</span>
+                </div>
+
+                {qtyError && (
+                  <p className="text-xs text-red-600 font-medium animate-fade-in">{qtyError}</p>
+                )}
               </div>
             )}
 
             {cartSuccess && (
-              <div className="bg-green-50 border border-green-200 text-green-800 rounded p-2.5 text-xs font-semibold text-center animate-fade-in flex items-center justify-center gap-1.5">
-                <span>🛒</span> Added to cart successfully! <Link to="/cart" className="underline font-bold">View Cart</Link>
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-3 text-xs font-semibold text-center animate-fade-in flex items-center justify-center gap-2 shadow-xs">
+                <span>🛒</span> Added {quantity} item(s) to your cart!{' '}
+                <Link to="/cart" className="underline font-bold text-emerald-800 hover:text-emerald-950">
+                  View Cart & Checkout →
+                </Link>
               </div>
             )}
 
-            {enquiryError && !isEnquiryModalOpen && (
-              <div className="bg-red-55 border border-red-200 text-red-850 rounded p-3 text-xs font-semibold animate-fade-in">
-                ⚠️ {enquiryError}
-              </div>
-            )}
-
+            {/* Primary Marketplace Action Buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
@@ -621,13 +849,14 @@ export default function ProductDetails() {
                   }
                   addToCart(product, quantity);
                   setCartSuccess(true);
-                  setTimeout(() => setCartSuccess(false), 4000);
+                  setTimeout(() => setCartSuccess(false), 5000);
                 }}
-                disabled={product.stock_quantity === 0}
-                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-3 px-5 rounded transition-all text-sm shadow-sm min-h-[44px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!inStock}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 px-6 rounded-lg transition-all text-sm shadow-sm min-h-[48px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Add to Cart
+                <span>🛒</span> Add to Cart
               </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -638,19 +867,24 @@ export default function ProductDetails() {
                   addToCart(product, quantity);
                   navigate('/checkout');
                 }}
-                disabled={product.stock_quantity === 0}
-                className="w-full bg-gov-navy hover:bg-gov-navy-light text-white font-extrabold py-3 px-5 rounded transition-all text-sm shadow-sm min-h-[44px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!inStock}
+                className="w-full bg-gov-navy hover:bg-gov-navy-light text-white font-bold py-3.5 px-6 rounded-lg transition-all text-sm shadow-sm min-h-[48px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Buy Now
+                <span>⚡</span> Buy Now
               </button>
             </div>
 
+            {/* Custom Design & Bulk Enquiry Button */}
             <button
               type="button"
               onClick={handleEnquiryClick}
-              className="w-full bg-white hover:bg-slate-50 text-gov-navy border border-gov-navy font-bold py-3 px-5 rounded transition-colors text-sm min-h-[44px] cursor-pointer flex items-center justify-center gap-2"
+              className="w-full bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold py-3.5 px-5 rounded-lg transition-colors text-sm min-h-[48px] cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 shadow-2xs"
             >
-              <span>✉️</span> Custom Design / Bulk Enquiry
+              <div className="flex items-center gap-2">
+                <span>✉️</span>
+                <span className="font-extrabold">Custom Order / Bulk Design Enquiry</span>
+              </div>
+              <span className="text-xs text-amber-800 font-medium">(Negotiate volume price & custom specs)</span>
             </button>
           </div>
         </div>
@@ -658,14 +892,14 @@ export default function ProductDetails() {
 
       {/* Login Required Modal */}
       {isLoginModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-lg p-6 max-w-sm w-full shadow-lg space-y-6">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-sm w-full shadow-2xl space-y-5">
             <div className="flex items-center gap-3">
               <span className="text-3xl" role="img" aria-label="Shield lock icon">🔐</span>
-              <h3 className="text-lg font-bold text-gov-navy m-0">Login Required</h3>
+              <h3 className="text-lg font-bold text-gov-navy m-0">Customer Login Required</h3>
             </div>
-            <p className="text-sm text-slate-655 leading-relaxed">
-              Please login as a customer to contact the artisan.
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Please sign in with your customer account to contact this artisan, negotiate bulk orders, or place a direct purchase.
             </p>
             <div className="flex gap-3 pt-2">
               <button
@@ -674,14 +908,14 @@ export default function ProductDetails() {
                   setIsLoginModalOpen(false);
                   navigate('/login', { state: { from: location.pathname } });
                 }}
-                className="bg-gov-navy hover:bg-gov-navy-light text-white text-sm font-bold px-4 py-2 rounded flex-grow text-center min-h-[40px] cursor-pointer shadow-sm"
+                className="bg-gov-navy hover:bg-gov-navy-light text-white text-sm font-bold px-4 py-2.5 rounded-lg flex-grow text-center min-h-[44px] cursor-pointer shadow-sm transition-colors"
               >
-                Login
+                Sign In
               </button>
               <button
                 type="button"
                 onClick={() => setIsLoginModalOpen(false)}
-                className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-sm font-bold px-4 py-2 rounded flex-grow text-center min-h-[40px] cursor-pointer"
+                className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-lg flex-grow text-center min-h-[44px] cursor-pointer transition-colors"
               >
                 Cancel
               </button>
@@ -690,132 +924,140 @@ export default function ProductDetails() {
         </div>
       )}
 
-      {/* Enquiry Form Modal */}
+      {/* Bulk & Custom Enquiry Modal with Dynamic Estimator */}
       {isEnquiryModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-lg p-6 max-w-md w-full shadow-lg space-y-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 my-8">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-gov-navy m-0 flex items-center gap-2">
-                <span className="text-xl" role="img" aria-label="Mail icon">✉️</span>
-                Send Enquiry
-              </h3>
+              <div>
+                <h3 className="text-xl font-bold text-gov-navy m-0 flex items-center gap-2">
+                  <span>✉️</span> Custom Design & Bulk Enquiry
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Send requirements directly to {artisanName}</p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setIsEnquiryModalOpen(false);
-                  setEnquiryMessage('');
-                  setEnquiryQty('');
-                  setEnquiryDate('');
-                  setEnquiryBudget('');
-                  setEnquiryRefImage(null);
                   setEnquiryError('');
                 }}
-                className="text-slate-400 hover:text-slate-655 font-bold text-lg cursor-pointer px-1"
+                className="text-slate-400 hover:text-slate-700 font-bold text-xl cursor-pointer p-1"
+                aria-label="Close enquiry modal"
               >
                 ✕
               </button>
             </div>
 
             {enquiryError && (
-              <div className="bg-red-50 border border-red-200 text-red-850 rounded p-3 text-xs font-semibold">
+              <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-xs font-semibold">
                 ⚠️ {enquiryError}
               </div>
             )}
 
-            <form onSubmit={handleEnquirySubmit} className="space-y-3.5">
+            <form onSubmit={handleEnquirySubmit} className="space-y-4">
+              {/* Product Reference */}
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Product
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Handicraft Reference
                 </label>
-                <input
-                  type="text"
-                  readOnly
-                  value={product.name}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-slate-600 text-sm font-medium focus:outline-none"
-                />
+                <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs font-semibold">
+                  <span>{product.name}</span>
+                  <span className="text-gov-navy font-bold">₹{unitPrice.toLocaleString('en-IN')}/unit</span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Quantity & Target Budget */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label htmlFor="enquiry-qty" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Quantity Needed
+                  <label htmlFor="enquiry-qty" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Quantity Required <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="enquiry-qty"
                     type="number"
                     min="1"
-                    placeholder="e.g. 50"
+                    placeholder="e.g. 25"
+                    required
                     disabled={isSendingEnquiry}
                     value={enquiryQty}
                     onChange={(e) => setEnquiryQty(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-350 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                    className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-gov-navy"
                   />
                 </div>
+
                 <div className="space-y-1">
-                  <label htmlFor="enquiry-budget" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Total Budget (₹)
+                  <label htmlFor="enquiry-budget" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Expected Budget (₹)
                   </label>
                   <input
                     id="enquiry-budget"
                     type="number"
-                    min="0"
-                    placeholder="e.g. 15000"
+                    min="1"
+                    placeholder="e.g. 10000"
                     disabled={isSendingEnquiry}
                     value={enquiryBudget}
                     onChange={(e) => setEnquiryBudget(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-355 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                    className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-gov-navy"
                   />
                 </div>
               </div>
 
-              {enquiryQty && parseInt(enquiryQty) > 0 && (
-                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded text-xs space-y-1.5">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Listed Price Estimate ({enquiryQty} × ₹{product.price || 0}):</span>
-                    <span className="font-semibold text-slate-900">₹{((product.price || 0) * parseInt(enquiryQty)).toLocaleString('en-IN')}</span>
+              {/* Dynamic Financial Estimator Card */}
+              {bulkQtyNum > 0 && (
+                <div className="p-4 bg-amber-50/80 border border-amber-300 rounded-lg text-xs space-y-2.5 animate-fade-in">
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span className="font-medium">Standard Catalog Total ({bulkQtyNum} × ₹{unitPrice}):</span>
+                    <span className="font-bold text-slate-900 text-sm">₹{bulkListEstimate.toLocaleString('en-IN')}</span>
                   </div>
-                  {enquiryBudget && (
+
+                  {bulkBudgetNum > 0 && (
                     <>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Your Proposed Budget:</span>
-                        <span className="font-bold text-gov-navy">₹{parseFloat(enquiryBudget).toLocaleString('en-IN')}</span>
+                      <div className="flex justify-between items-center text-slate-700 pt-1.5 border-t border-amber-200">
+                        <span className="font-medium">Your Proposed Budget:</span>
+                        <span className="font-extrabold text-gov-navy text-sm">₹{bulkBudgetNum.toLocaleString('en-IN')}</span>
                       </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Equivalent Price Per Unit:</span>
-                        <span className="font-medium text-slate-800">
-                          ₹{(parseFloat(enquiryBudget) / parseInt(enquiryQty)).toFixed(2)} / unit
-                        </span>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Proposed Price Per Unit:</span>
+                        <span className="font-bold text-slate-900">₹{bulkUnitRate.toFixed(2)} / piece</span>
                       </div>
-                      <div className="flex justify-between pt-1 border-t border-amber-200/60 font-semibold">
-                        <span>Budget Difference:</span>
-                        <span className={parseFloat(enquiryBudget) < ((product.price || 0) * parseInt(enquiryQty)) ? 'text-amber-700' : 'text-emerald-700'}>
-                          {parseFloat(enquiryBudget) < ((product.price || 0) * parseInt(enquiryQty))
-                            ? `-₹${(((product.price || 0) * parseInt(enquiryQty)) - parseFloat(enquiryBudget)).toLocaleString('en-IN')} (${(((product.price || 0) * parseInt(enquiryQty) - parseFloat(enquiryBudget)) / ((product.price || 0) * parseInt(enquiryQty)) * 100).toFixed(0)}% below list)`
-                            : `+₹${(parseFloat(enquiryBudget) - ((product.price || 0) * parseInt(enquiryQty))).toLocaleString('en-IN')}`}
+
+                      <div className="flex justify-between items-center pt-1 border-t border-amber-200 font-semibold">
+                        <span>Negotiation Variance:</span>
+                        <span className={budgetDifference < 0 ? 'text-amber-800' : 'text-emerald-800'}>
+                          {budgetDifference < 0
+                            ? `-₹${Math.abs(budgetDifference).toLocaleString('en-IN')} (${Math.abs(percentDiff).toFixed(0)}% bulk volume discount requested)`
+                            : `+₹${budgetDifference.toLocaleString('en-IN')} (custom design premium buffer)`}
                         </span>
                       </div>
                     </>
                   )}
+
+                  <p className="text-[10px] text-slate-500 italic m-0 pt-1">
+                    * This calculation provides preliminary cost guidance. The artisan will verify workshop scheduling and raw material feasibility before confirming.
+                  </p>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Delivery Date & Sketch Attachment */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label htmlFor="enquiry-date" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Preferred Date
+                  <label htmlFor="enquiry-date" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Preferred Completion Date
                   </label>
                   <input
                     id="enquiry-date"
                     type="date"
+                    min={new Date().toISOString().split('T')[0]}
                     disabled={isSendingEnquiry}
                     value={enquiryDate}
                     onChange={(e) => setEnquiryDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-355 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy text-slate-700"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-gov-navy text-slate-800"
                   />
                 </div>
+
                 <div className="space-y-1">
-                  <label htmlFor="enquiry-image" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Reference Design File
+                  <label htmlFor="enquiry-image" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Reference Sketch / Photo
                   </label>
                   <input
                     id="enquiry-image"
@@ -823,50 +1065,51 @@ export default function ProductDetails() {
                     accept="image/*"
                     disabled={isSendingEnquiry || enquiryUploading}
                     onChange={(e) => setEnquiryRefImage(e.target.files[0])}
-                    className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                    className="w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
                   />
                 </div>
               </div>
 
+              {/* Custom Requirement Details */}
               <div className="space-y-1">
-                <label htmlFor="enquiry-msg" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Enquiry Message
+                <label htmlFor="enquiry-msg" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Custom Requirements & Dimensions <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="enquiry-msg"
                   rows="3"
                   required
                   disabled={isSendingEnquiry}
-                  placeholder="Ask about product details, customized orders, or shipping timelines..."
+                  placeholder="Specify custom sizes, design variations, colors, packaging requirements, or delivery location..."
                   value={enquiryMessage}
                   onChange={(e) => setEnquiryMessage(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-355 rounded text-xs focus:ring-2 focus:ring-gov-navy focus:border-gov-navy"
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-2 focus:ring-gov-navy"
                 ></textarea>
               </div>
 
+              {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsEnquiryModalOpen(false);
-                    setEnquiryMessage('');
-                    setEnquiryQty('');
-                    setEnquiryDate('');
-                    setEnquiryBudget('');
-                    setEnquiryRefImage(null);
-                    setEnquiryError('');
-                  }}
+                  onClick={() => setIsEnquiryModalOpen(false)}
                   disabled={isSendingEnquiry || enquiryUploading}
-                  className="bg-white hover:bg-slate-55 border border-slate-300 text-slate-750 text-xs font-bold px-4 py-2 rounded min-h-[38px] cursor-pointer"
+                  className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-lg min-h-[40px] cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSendingEnquiry || enquiryUploading}
-                  className="bg-gov-saffron hover:bg-gov-saffron-light text-white text-xs font-bold px-5 py-2 rounded min-h-[38px] cursor-pointer shadow-sm disabled:opacity-50"
+                  className="bg-gov-navy hover:bg-gov-navy-light text-white text-xs font-bold px-6 py-2.5 rounded-lg min-h-[40px] cursor-pointer shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isSendingEnquiry || enquiryUploading ? 'Sending...' : 'Send Enquiry'}
+                  {isSendingEnquiry || enquiryUploading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <span>Submit Enquiry →</span>
+                  )}
                 </button>
               </div>
             </form>
