@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import DashboardNavTabs from '../components/DashboardNavTabs.jsx';
 
 const STATUS_CONFIG = {
   placed: {
@@ -429,6 +430,7 @@ function MyOrdersPage() {
 
   return (
     <div style={{ maxWidth: '480px', margin: '0 auto', padding: '1rem', fontFamily: 'inherit', color: 'var(--text)', minHeight: '100vh' }}>
+      <DashboardNavTabs />
       {/* Top Header */}
       <div
         style={{

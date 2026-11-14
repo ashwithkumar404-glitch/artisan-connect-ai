@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import ThemeToggle from '../components/ThemeToggle';
+import DashboardNavTabs from '../components/DashboardNavTabs';
 
 function CustomerFeedbackPage() {
   const navigate = useNavigate();
@@ -332,6 +333,7 @@ function CustomerFeedbackPage() {
 
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1rem', minHeight: '100vh', boxSizing: 'border-box', color: 'var(--text)' }}>
+      <DashboardNavTabs />
       {/* Top Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import DashboardNavTabs from '../components/DashboardNavTabs.jsx';
 
 function MyProductsPage() {
   const navigate = useNavigate();
@@ -153,6 +154,7 @@ function MyProductsPage() {
 
   return (
     <div style={{ maxWidth: '480px', margin: '0 auto', padding: '1rem', fontFamily: 'inherit', color: 'var(--text)' }}>
+      <DashboardNavTabs />
       {/* Top Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

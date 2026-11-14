@@ -6,6 +6,7 @@ import SideMenu from "../components/SideMenu.jsx";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../lib/AuthContext";
 import ThemeToggle from "../components/ThemeToggle.jsx";
+import DashboardNavTabs from "../components/DashboardNavTabs.jsx";
 import {
   isLatinTransliteration,
   extractProductFacts,
@@ -1121,6 +1122,9 @@ function HomePage() {
           />
         </div>
       </header>
+
+      {/* Global Dashboard Navigation Hub Bar */}
+      <DashboardNavTabs />
 
       {/* Side drawer */}
       <SideMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} />

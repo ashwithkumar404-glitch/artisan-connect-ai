@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import DashboardNavTabs from '../components/DashboardNavTabs.jsx';
 import {
   MonthlySalesBarChart,
   OrdersByStageBarChart,
@@ -384,6 +385,7 @@ function ProductPerformancePage() {
 
   return (
     <div style={{ maxWidth: '520px', margin: '0 auto', padding: '1rem', fontFamily: 'inherit', color: 'var(--text)', minHeight: '100vh' }}>
+      <DashboardNavTabs />
       {/* Top Header */}
       <div
         style={{

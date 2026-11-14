@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function PublicLayout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -132,10 +133,13 @@ export default function PublicLayout() {
                   </Link>
                 </>
               )}
+
+              <ThemeToggle />
             </nav>
 
-            {/* Mobile Menu Button */}
-            <div className="flex md:hidden">
+            {/* Mobile Menu Button & Theme Toggle */}
+            <div className="flex md:hidden items-center gap-2">
+              <ThemeToggle />
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 type="button"

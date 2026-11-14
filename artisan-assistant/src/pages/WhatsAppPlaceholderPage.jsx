@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import ThemeToggle from "../components/ThemeToggle.jsx";
+import DashboardNavTabs from "../components/DashboardNavTabs.jsx";
+import CustomerInquiriesHub from "../components/CustomerInquiriesHub.jsx";
 import {
   createVoiceSession,
   VOICE_STATES,
@@ -53,6 +55,9 @@ function WhatsAppPlaceholderPage() {
 
   // Meta Cloud API setup accordion
   const [showMetaInfo, setShowMetaInfo] = useState(false);
+  const [showInquiriesHub, setShowInquiriesHub] = useState(() => {
+    return searchParams.get('action') === 'check_enquiries' || Boolean(searchParams.get('enquiryId'));
+  });
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://otkpcezsjoysyksymjrn.supabase.co";
   const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
 
@@ -1331,6 +1336,40 @@ function WhatsAppPlaceholderPage() {
           <ThemeToggle />
         </div>
       </header>
+
+      {/* Global Dashboard Navigation Hub Bar */}
+      <DashboardNavTabs />
+
+      {/* Customer Inquiries Modal Hub if active */}
+      {showInquiriesHub && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            backgroundColor: 'rgba(0,0,0,0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem'
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '920px',
+              height: '85vh',
+              maxHeight: '750px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)'
+            }}
+          >
+            <CustomerInquiriesHub
+              specificEnquiryId={searchParams.get('enquiryId')}
+              onClose={() => setShowInquiriesHub(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Chat Messages Viewport */}
       <main style={{
