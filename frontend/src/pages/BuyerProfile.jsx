@@ -800,7 +800,7 @@ export default function BuyerProfile() {
                           return (
                             <div className="bg-white border border-blue-200 text-blue-900 rounded-lg p-2.5 text-[11px] shrink-0 shadow-2xs">
                               <div className="font-bold flex items-center gap-1">
-                                <span>🚚</span> Carrier: {tracking.carrier}
+                                <span>🚚</span> Courier: {tracking.carrier}
                               </div>
                               <div className="font-mono text-slate-800 font-semibold">Track #: {tracking.trackingNumber}</div>
                               {tracking.dispatchedAt && (
@@ -876,7 +876,7 @@ export default function BuyerProfile() {
                                 'Confirming...'
                               ) : (
                                 <>
-                                  <span>✓</span> Confirm Order Received
+                                  <span>✓</span> Confirm Order Received / ವಿತರಣೆ ಖಚಿತಪಡಿಸಿ
                                 </>
                               )}
                             </button>
@@ -1051,7 +1051,7 @@ export default function BuyerProfile() {
                     {enq.status === 'confirmed' && (
                       <div className="bg-teal-50 border border-teal-300 rounded-xl p-5 text-xs space-y-2.5">
                         <div className="flex items-center gap-2 text-teal-900 font-bold text-sm">
-                          <span>🎉</span> Custom Order Confirmed & Production Activated!
+                          <span>🎉</span> Order Confirmed & Production In Progress! Custom Order Confirmed & Production Activated!
                         </div>
                         <p className="text-slate-700 m-0 leading-relaxed">
                           The artisan has verified workshop capacity and scheduled production for your custom piece.
@@ -1071,7 +1071,7 @@ export default function BuyerProfile() {
                           onClick={() => handleTabChange('orders')}
                           className="mt-2 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs px-4 py-2 rounded-lg cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5"
                         >
-                          <span>📦</span> Switch to My Orders Tab
+                          <span>📦</span> Switch to My Orders Tab / View in My Orders Tab
                         </button>
                       </div>
                     )}

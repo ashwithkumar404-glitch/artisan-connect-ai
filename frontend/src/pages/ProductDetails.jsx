@@ -1006,7 +1006,7 @@ export default function ProductDetails() {
               {bulkQtyNum > 0 && (
                 <div className="p-4 bg-amber-50/80 border border-amber-300 rounded-lg text-xs space-y-2.5 animate-fade-in">
                   <div className="flex justify-between items-center text-slate-700">
-                    <span className="font-medium">Standard Catalog Total ({bulkQtyNum} × ₹{unitPrice}):</span>
+                    <span className="font-medium">Listed Price Estimate ({bulkQtyNum} × ₹{unitPrice}):</span>
                     <span className="font-bold text-slate-900 text-sm">₹{bulkListEstimate.toLocaleString('en-IN')}</span>
                   </div>
 
@@ -1017,12 +1017,12 @@ export default function ProductDetails() {
                         <span className="font-extrabold text-gov-navy text-sm">₹{bulkBudgetNum.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Proposed Price Per Unit:</span>
+                        <span>Equivalent Price Per Unit:</span>
                         <span className="font-bold text-slate-900">₹{bulkUnitRate.toFixed(2)} / piece</span>
                       </div>
 
                       <div className="flex justify-between items-center pt-1 border-t border-amber-200 font-semibold">
-                        <span>Negotiation Variance:</span>
+                        <span>Budget Difference:</span>
                         <span className={budgetDifference < 0 ? 'text-amber-800' : 'text-emerald-800'}>
                           {budgetDifference < 0
                             ? `-₹${Math.abs(budgetDifference).toLocaleString('en-IN')} (${Math.abs(percentDiff).toFixed(0)}% bulk volume discount requested)`
