@@ -215,7 +215,31 @@ function MyOrdersPage() {
     if (!authLoading) {
       fetchArtisanOrders();
     }
-  }, [authLoading, fetchArtisanOrders]);
+
+    if (!artisan?.id) return;
+
+    // Realtime subscription for incoming order updates
+    const channelId = Math.random().toString(36).substring(7);
+    const channel = supabase
+      .channel(`artisan-orders-${artisan.id}-${channelId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items',
+          filter: `artisan_id=eq.${artisan.id}`
+        },
+        () => {
+          fetchArtisanOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authLoading, artisan?.id, fetchArtisanOrders]);
 
   // Handle status update (confirmed -> preparing -> shipped -> delivered)
   const handleUpdateStatus = async (orderId, newStatus, customerId, firstItemName, trackingDetails = null) => {

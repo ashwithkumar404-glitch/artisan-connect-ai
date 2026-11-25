@@ -189,8 +189,28 @@ export default function Explore() {
 
     fetchExploreProducts();
 
+    // Supabase Realtime subscription: auto-refresh catalog when new products are published
+    const channelId = Math.random().toString(36).substring(7);
+    const channel = supabase
+      .channel(`marketplace-products-${channelId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        () => {
+          if (active) {
+            fetchExploreProducts();
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       active = false;
+      supabase.removeChannel(channel);
     };
   }, [searchTerm, selectedCategory, sortBy, retryCount]);
 
@@ -621,9 +641,10 @@ export default function Explore() {
             const categoryName = product.categories?.name || 'Uncategorized';
             const artisanName = product.artisans?.business_name || product.artisans?.profiles?.full_name || 'Unknown Artisan';
             const locationName = product.artisans?.location || 'Unknown Location';
+            const isRecent = product.created_at && (Date.now() - new Date(product.created_at).getTime()) < 1000 * 60 * 60 * 24 * 7;
             
             return (
-              <div key={product.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col hover:shadow-md transition-shadow relative">
+              <div key={product.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col hover:shadow-md transition-all duration-300 relative animate-fade-in">
                 {/* Image Section */}
                 <Link to={`/product/${product.id}`} className="block h-48 bg-slate-50 relative border-b border-slate-100 overflow-hidden group">
                   {imageUrl ? (
@@ -641,6 +662,11 @@ export default function Explore() {
                       <span className="text-3xl mb-1" role="img" aria-label="package placeholder icon">📦</span>
                       <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">No Image</span>
                     </div>
+                  )}
+                  {isRecent && product.stock_quantity > 0 && (
+                    <span className="absolute top-2 left-2 bg-gradient-to-r from-gov-saffron to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full shadow-sm tracking-wide uppercase flex items-center gap-1 animate-pulse">
+                      ✨ NEW ARRIVAL
+                    </span>
                   )}
                   {product.stock_quantity === 0 && (
                     <span className="absolute top-2 right-2 bg-red-655 text-white text-[9px] font-extrabold px-2 py-0.5 rounded">

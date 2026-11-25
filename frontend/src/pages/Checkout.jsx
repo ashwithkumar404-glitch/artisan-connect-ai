@@ -93,6 +93,31 @@ export default function Checkout() {
         await Promise.all(promises);
       }
 
+      // 3b. Dispatch Realtime Notifications to Specific Artisans
+      const uniqueArtisanIds = [...new Set(cart.map(item => item.artisan_id || item.product?.artisan_id).filter(Boolean))];
+      if (uniqueArtisanIds.length > 0) {
+        const { data: artisanProfiles } = await supabase
+          .from('artisans')
+          .select('id, profile_id')
+          .in('id', uniqueArtisanIds);
+
+        if (artisanProfiles && artisanProfiles.length > 0) {
+          const artisanNotifPromises = artisanProfiles
+            .filter(a => Boolean(a.profile_id))
+            .map(a =>
+              createNotification(
+                a.profile_id,
+                'order_received',
+                'New Customer Order Received',
+                `A customer placed a new order #${order.id.slice(0, 8).toUpperCase()} for your handcrafted items!`,
+                order.id,
+                'order'
+              )
+            );
+          await Promise.all(artisanNotifPromises);
+        }
+      }
+
       // 4. Create Customer Notification
       await createNotification(
         user.id,

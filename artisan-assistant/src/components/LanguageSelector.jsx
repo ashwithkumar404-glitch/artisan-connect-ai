@@ -51,9 +51,20 @@ function LanguageSelector({ selectedLanguage, onLanguageChange }) {
   };
 
   const handleOpenMarketplace = () => {
-    const marketplaceUrl = import.meta.env.VITE_MARKETPLACE_URL;
-    if (marketplaceUrl && marketplaceUrl.trim()) {
-      let targetUrl = marketplaceUrl.trim();
+    const envMarketplaceUrl = import.meta.env.VITE_MARKETPLACE_URL;
+    let targetUrl = '';
+
+    if (envMarketplaceUrl && envMarketplaceUrl.trim()) {
+      targetUrl = envMarketplaceUrl.trim();
+    } else if (typeof window !== 'undefined' && window.location) {
+      // Intelligent fallback for local development or LAN testing:
+      // If assistant runs on port 5174, marketplace is typically on port 5173 on the same host/IP
+      const hostname = window.location.hostname;
+      const protocol = window.location.protocol;
+      targetUrl = `${protocol}//${hostname}:5173`;
+    }
+
+    if (targetUrl) {
       if (!/^https?:\/\//i.test(targetUrl)) {
         targetUrl = 'https://' + targetUrl;
       }
