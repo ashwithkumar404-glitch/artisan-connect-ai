@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
-import ThemeToggle from "../components/ThemeToggle.jsx";
+import VoiceInput from '../components/VoiceInput.jsx';;
 import DashboardNavTabs from "../components/DashboardNavTabs.jsx";
+import ThemeToggle from "../components/ThemeToggle.jsx";
 import CustomerInquiriesHub from "../components/CustomerInquiriesHub.jsx";
 import {
   createVoiceSession,
@@ -42,6 +43,8 @@ function WhatsAppPlaceholderPage() {
   // Conversational state
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
+  // Voice input component (added)
+
   const [workflowStep, setWorkflowStep] = useState('idle'); // 'idle' | 'awaiting_voice' | 'processing_voice' | 'reviewing_draft' | 'saving' | 'published'
   const [pendingPhotoFile, setPendingPhotoFile] = useState(null);
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState("");
