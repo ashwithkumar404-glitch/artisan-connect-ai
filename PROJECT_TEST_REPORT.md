@@ -150,3 +150,4 @@
    - Bundler: Vite v8.3.4
    - Output: `dist/index.html` (1.14 kB), `dist/assets/index.css` (28.36 kB), `dist/assets/index.js` (815.87 kB)
    - Status: **Zero compilation errors, zero broken imports**.
+

@@ -57,11 +57,27 @@ function LanguageSelector({ selectedLanguage, onLanguageChange }) {
     if (envMarketplaceUrl && envMarketplaceUrl.trim()) {
       targetUrl = envMarketplaceUrl.trim();
     } else if (typeof window !== 'undefined' && window.location) {
-      // Intelligent fallback for local development or LAN testing:
-      // If assistant runs on port 5174, marketplace is typically on port 5173 on the same host/IP
       const hostname = window.location.hostname;
       const protocol = window.location.protocol;
-      targetUrl = `${protocol}//${hostname}:5173`;
+      const isLocalHost =
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.') ||
+        hostname.endsWith('.local');
+
+      if (isLocalHost) {
+        // Local/LAN development fallback
+        targetUrl = `${protocol}//${hostname}:5173`;
+      } else {
+        // Production deployment: never append development port :5173
+        // Check if hosted under a vercel sub-domain or default to canonical marketplace URL
+        if (hostname.includes('artisan-assistant')) {
+          targetUrl = `https://${hostname.replace('artisan-assistant', 'artisan-connect-ai')}`;
+        } else {
+          targetUrl = 'https://artisan-connect-ai.vercel.app';
+        }
+      }
     }
 
     if (targetUrl) {

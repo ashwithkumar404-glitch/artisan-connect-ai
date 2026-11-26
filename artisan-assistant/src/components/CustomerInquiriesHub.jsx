@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import {
+  translateCustomerMessageToKannada,
+  isKannadaText
+} from '../lib/kannadaTranslator';
 
 export default function CustomerInquiriesHub({ specificEnquiryId, onClose }) {
   const { user, profile, artisan } = useAuth();
@@ -25,6 +29,39 @@ export default function CustomerInquiriesHub({ specificEnquiryId, onClose }) {
   });
 
   const isKn = language === 'kn';
+
+  // Speech synthesis for Kannada audio listening
+  const [speakingId, setSpeakingId] = useState(null);
+
+  const handleSpeakText = (id, textToSpeak) => {
+    if (!('speechSynthesis' in window)) {
+      alert(isKn ? 'ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಧ್ವನಿ ಸೌಲಭ್ಯ ಲಭ್ಯವಿಲ್ಲ.' : 'Speech synthesis not supported in this browser.');
+      return;
+    }
+    if (speakingId === id) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    const voices = window.speechSynthesis.getVoices() || [];
+    const knVoice = voices.find(v => v.lang.startsWith('kn') || v.lang.includes('kn-IN') || v.name.toLowerCase().includes('kannada'));
+    if (knVoice) {
+      utterance.voice = knVoice;
+      utterance.lang = 'kn-IN';
+    } else if (isKannadaText(textToSpeak)) {
+      utterance.lang = 'kn-IN';
+    } else {
+      utterance.lang = isKn ? 'kn-IN' : 'en-IN';
+    }
+    utterance.rate = 0.9;
+    utterance.onend = () => setSpeakingId(null);
+    utterance.onerror = () => setSpeakingId(null);
+
+    setSpeakingId(id);
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Auto-scroll messages
   useEffect(() => {
@@ -478,9 +515,72 @@ export default function CustomerInquiriesHub({ specificEnquiryId, onClose }) {
                   <strong style={{ color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>
                     📌 {isKn ? 'ಪ್ರಾರಂಭಿಕ ವಿಚಾರಣೆ ವಿವರ' : 'Initial Inquiry Details'}
                   </strong>
-                  <p style={{ margin: 0, color: 'var(--secondary-text)', lineHeight: 1.4 }}>
-                    {selectedEnquiry.message}
-                  </p>
+                  <div style={{ marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--secondary-text)', fontWeight: 600, display: 'block' }}>
+                      {isKn ? 'ಮೂಲ ಗ್ರಾಹಕರ ಸಂದೇಶ:' : 'Original customer message:'}
+                    </span>
+                    <p style={{ margin: '0.15rem 0 0.35rem', color: 'var(--text)', lineHeight: 1.4, fontStyle: 'italic' }}>
+                      "{selectedEnquiry.message}"
+                    </p>
+                  </div>
+                  {(() => {
+                    const trans = translateCustomerMessageToKannada(selectedEnquiry.message);
+                    if (!trans.isAlreadyKannada && trans.translation) {
+                      return (
+                        <div style={{ margin: '0.25rem 0', padding: '0.4rem 0.6rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                          <div>
+                            <span style={{ fontSize: '0.68rem', color: '#1d4ed8', fontWeight: 700, display: 'block' }}>
+                              {isKn ? 'ಕನ್ನಡ ಅನುವಾದ:' : 'Kannada translation:'}
+                            </span>
+                            <span style={{ fontSize: '0.78rem', color: '#1e3a8a', fontWeight: 600 }}>
+                              {trans.translation}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakText('init-enq-' + selectedEnquiry.id, trans.translation)}
+                            style={{
+                              background: speakingId === 'init-enq-' + selectedEnquiry.id ? '#dc2626' : '#2563EB',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '0.2rem 0.45rem',
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}
+                          >
+                            {speakingId === 'init-enq-' + selectedEnquiry.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಆಲಿಸಿ' : '🔊 Listen')}
+                          </button>
+                        </div>
+                      );
+                    }
+                    if (trans.isAlreadyKannada) {
+                      return (
+                        <div style={{ textAlign: 'right', marginTop: '0.2rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakText('init-enq-' + selectedEnquiry.id, selectedEnquiry.message)}
+                            style={{
+                              background: speakingId === 'init-enq-' + selectedEnquiry.id ? '#dc2626' : '#2563EB',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '0.2rem 0.45rem',
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {speakingId === 'init-enq-' + selectedEnquiry.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಆಲಿಸಿ' : '🔊 Listen')}
+                          </button>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   {selectedEnquiry.preferred_delivery_date && (
                     <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', color: 'var(--secondary-text)' }}>
                       📅 {isKn ? 'ಅಪೇಕ್ಷಿತ ದಿನಾಂಕ:' : 'Target Date:'} {new Date(selectedEnquiry.preferred_delivery_date).toLocaleDateString()}
@@ -508,7 +608,7 @@ export default function CustomerInquiriesHub({ specificEnquiryId, onClose }) {
                       >
                         <div
                           style={{
-                            maxWidth: '80%',
+                            maxWidth: '85%',
                             padding: '0.55rem 0.75rem',
                             borderRadius: isArtisan ? '10px 10px 2px 10px' : '10px 10px 10px 2px',
                             backgroundColor: isArtisan ? 'var(--wa-user-bubble, #d9fdd3)' : 'var(--bg)',
@@ -521,7 +621,75 @@ export default function CustomerInquiriesHub({ specificEnquiryId, onClose }) {
                           <div style={{ fontWeight: 700, fontSize: '0.7rem', color: 'var(--primary-green)', marginBottom: '0.2rem' }}>
                             {isArtisan ? (isKn ? 'ನೀವು (ಕುಶಲಕರ್ಮಿ)' : 'You (Artisan)') : (selectedEnquiry.profiles?.full_name || 'Customer')}
                           </div>
-                          <div>{m.message}</div>
+                          <div>
+                            {!isArtisan && (
+                              <span style={{ fontSize: '0.68rem', color: 'var(--secondary-text)', display: 'block' }}>
+                                {isKn ? 'ಮೂಲ ಸಂದೇಶ:' : 'Original message:'}
+                              </span>
+                            )}
+                            <div style={{ fontStyle: isArtisan ? 'normal' : 'italic', marginBottom: '0.25rem' }}>
+                              {isArtisan ? m.message : `"${m.message}"`}
+                            </div>
+                          </div>
+                          {(() => {
+                            if (isArtisan) return null;
+                            const trans = translateCustomerMessageToKannada(m.message);
+                            if (!trans.isAlreadyKannada && trans.translation) {
+                              return (
+                                <div style={{ margin: '0.25rem 0', padding: '0.35rem 0.5rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                  <div>
+                                    <span style={{ fontSize: '0.65rem', color: '#1d4ed8', fontWeight: 700, display: 'block' }}>
+                                      {isKn ? 'ಕನ್ನಡ ಅನುವಾದ:' : 'Kannada translation:'}
+                                    </span>
+                                    <span style={{ fontSize: '0.76rem', color: '#1e3a8a', fontWeight: 600 }}>
+                                      {trans.translation}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSpeakText('msg-' + m.id, trans.translation)}
+                                    style={{
+                                      background: speakingId === 'msg-' + m.id ? '#dc2626' : '#2563EB',
+                                      color: '#ffffff',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      padding: '0.2rem 0.4rem',
+                                      fontSize: '0.68rem',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      whiteSpace: 'nowrap',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    {speakingId === 'msg-' + m.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಆಲಿಸಿ' : '🔊 Listen')}
+                                  </button>
+                                </div>
+                              );
+                            }
+                            if (trans.isAlreadyKannada) {
+                              return (
+                                <div style={{ textAlign: 'right', marginTop: '0.2rem' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSpeakText('msg-' + m.id, m.message)}
+                                    style={{
+                                      background: speakingId === 'msg-' + m.id ? '#dc2626' : '#2563EB',
+                                      color: '#ffffff',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      padding: '0.2rem 0.4rem',
+                                      fontSize: '0.68rem',
+                                      fontWeight: 600,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {speakingId === 'msg-' + m.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಆಲಿಸಿ' : '🔊 Listen')}
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                           {m.proposed_amount && (
                             <div style={{ marginTop: '0.3rem', fontWeight: 700, color: '#047857', fontSize: '0.75rem' }}>
                               💰 Counteroffer: ₹{Number(m.proposed_amount).toLocaleString('en-IN')} (₹{m.unit_price_equivalent}/unit)

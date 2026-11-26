@@ -33,3 +33,4 @@
 | **ML Price Recommendation Engine** | **WORKING AND VERIFIED** | `ml/train.py`, `ml/model/best_regressor.pkl` | Scikit-learn Random Forest Regressor | MAE: ₹402.61, RMSE: ₹673.33, R²: 0.273 on verified craft pricing dataset. |
 | **External WhatsApp Cloud API** | **IMPLEMENTED BUT NOT VERIFIED** | `supabase/functions/whatsapp-webhook/index.ts` | Meta Graph API v20.0, HMAC-SHA256 webhook | Code complete with signature validation & deduplication; requires live Meta Business credentials to verify externally. |
 | **External Payment Gateway SDK** | **NOT IMPLEMENTED** | `frontend/src/pages/Checkout.jsx` | N/A (Standard simulated checkout) | Real Razorpay / Stripe gateway tokenization is not wired; checkout records authentic database orders directly. |
+

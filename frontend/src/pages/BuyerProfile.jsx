@@ -331,6 +331,76 @@ export default function BuyerProfile() {
     }
   };
 
+  // Real-time synchronization for orders, enquiries, and conversation messages
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channelId = Math.random().toString(36).substring(7);
+    const channel = supabase
+      .channel(`buyer-realtime-${user.id}-${channelId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `customer_id=eq.${user.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setOrders((prev) => {
+              const exists = prev.some((o) => o.id === payload.new.id);
+              if (exists) {
+                return prev.map((o) =>
+                  o.id === payload.new.id ? { ...o, ...payload.new } : o
+                );
+              }
+              loadOrders();
+              return prev;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enquiries',
+          filter: `customer_id=eq.${user.id}`
+        },
+        () => {
+          loadEnquiries();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'enquiry_messages'
+        },
+        (payload) => {
+          const newMsg = payload.new;
+          if (newMsg && newMsg.enquiry_id) {
+            setEnquiryMessagesMap((prev) => {
+              const existing = prev[newMsg.enquiry_id] || [];
+              if (existing.some((m) => m.id === newMsg.id)) return prev;
+              return {
+                ...prev,
+                [newMsg.enquiry_id]: [...existing, newMsg]
+              };
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const handleAcceptOffer = async (enq) => {
     const agreedAmount = enq.counteroffer_amount || enq.budget;
     const confirmAccept = window.confirm(
@@ -889,6 +959,15 @@ export default function BuyerProfile() {
                             >
                               <span>⭐</span> Leave Review
                             </button>
+                          )}
+
+                          {order.order_items?.[0]?.products?.id && (
+                            <Link
+                              to={`/product/${order.order_items[0].products.id}`}
+                              className="px-3.5 py-2 border border-gov-navy text-gov-navy hover:bg-slate-50 font-bold text-xs rounded-lg transition-colors inline-flex items-center gap-1.5 cursor-pointer min-h-[38px]"
+                            >
+                              <span>💬</span> Message Artisan
+                            </Link>
                           )}
 
                           <button

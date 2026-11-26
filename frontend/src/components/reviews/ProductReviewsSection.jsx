@@ -13,7 +13,7 @@ import ReviewForm from './ReviewForm';
  * - Write a Review interface with verified purchase gating
  * - Professional empty state: "Be the first to review this product."
  */
-export default function ProductReviewsSection({ productId, productName }) {
+export default function ProductReviewsSection({ productId, productName, onReviewSubmitted }) {
   const [reviews, setReviews] = useState([]);
   const [customersMap, setCustomersMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
@@ -86,7 +86,31 @@ export default function ProductReviewsSection({ productId, productName }) {
 
   useEffect(() => {
     loadProductReviews();
-  }, [loadProductReviews]);
+
+    if (!productId) return;
+
+    // Realtime subscription for reviews of this product across devices
+    const channel = supabase
+      .channel(`product_reviews_live_${productId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'product_reviews',
+          filter: `product_id=eq.${productId}`
+        },
+        () => {
+          loadProductReviews();
+          if (onReviewSubmitted) onReviewSubmitted();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [productId, loadProductReviews, onReviewSubmitted]);
 
   // Derived sorted and filtered reviews
   const filteredAndSortedReviews = useMemo(() => {
@@ -116,6 +140,7 @@ export default function ProductReviewsSection({ productId, productName }) {
 
   const handleReviewSubmitted = () => {
     loadProductReviews();
+    if (onReviewSubmitted) onReviewSubmitted();
   };
 
   return (

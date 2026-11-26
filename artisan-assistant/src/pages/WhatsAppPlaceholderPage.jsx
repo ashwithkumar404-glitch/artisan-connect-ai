@@ -15,6 +15,10 @@ import {
   buildProductListing,
   interpretCorrectionCommand
 } from "../lib/kannadaProductEngine.js";
+import {
+  translateCustomerMessageToKannada,
+  isKannadaText
+} from "../lib/kannadaTranslator.js";
 
 // Helper to convert blob to Base64
 function fileToBase64(file) {
@@ -72,6 +76,39 @@ function WhatsAppPlaceholderPage() {
     localStorage.setItem('artisan_language', lang);
   };
 
+  // Speech synthesis for Kannada audio read-out
+  const [speakingMsgId, setSpeakingMsgId] = useState(null);
+
+  const speakMessageText = (msgId, textToSpeak) => {
+    if (!('speechSynthesis' in window)) {
+      alert(isKn ? 'ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಧ್ವನಿ ಸೌಲಭ್ಯ ಲಭ್ಯವಿಲ್ಲ.' : 'Speech synthesis not supported in this browser.');
+      return;
+    }
+    if (speakingMsgId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    const voices = window.speechSynthesis.getVoices() || [];
+    const knVoice = voices.find(v => v.lang.startsWith('kn') || v.lang.includes('kn-IN') || v.name.toLowerCase().includes('kannada'));
+    if (knVoice) {
+      utterance.voice = knVoice;
+      utterance.lang = 'kn-IN';
+    } else if (isKannadaText(textToSpeak)) {
+      utterance.lang = 'kn-IN';
+    } else {
+      utterance.lang = isKn ? 'kn-IN' : 'en-IN';
+    }
+    utterance.rate = 0.9;
+    utterance.onend = () => setSpeakingMsgId(null);
+    utterance.onerror = () => setSpeakingMsgId(null);
+
+    setSpeakingMsgId(msgId);
+    window.speechSynthesis.speak(utterance);
+  };
+
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -122,6 +159,63 @@ function WhatsAppPlaceholderPage() {
       handleCheckEnquiries(enqParam);
     }
   }, [searchParams, artisan?.id]);
+
+  // Real-time listener for incoming customer enquiries & updates
+  useEffect(() => {
+    if (!artisan?.id) return;
+
+    const channelId = Math.random().toString(36).substring(7);
+    const channel = supabase
+      .channel(`artisan-whatsapp-${artisan.id}-${channelId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'enquiries',
+          filter: `artisan_id=eq.${artisan.id}`
+        },
+        (payload) => {
+          if (payload.new?.id) {
+            addMessage('assistant', isKn
+              ? `🔔 **ಹೊಸ ಗ್ರಾಹಕರ ವಿಚಾರಣೆ ಬಂದಿದೆ!**`
+              : `🔔 **New Customer Enquiry Received!**`
+            );
+            handleCheckEnquiries(payload.new.id);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'enquiries',
+          filter: `artisan_id=eq.${artisan.id}`
+        },
+        (payload) => {
+          if (payload.new?.id) {
+            setMessages(prev => prev.map(m => {
+              if (m.enquiryCard && m.enquiryCard.id === payload.new.id) {
+                return {
+                  ...m,
+                  enquiryCard: {
+                    ...m.enquiryCard,
+                    ...payload.new
+                  }
+                };
+              }
+              return m;
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [artisan?.id, isKn]);
 
   // Helper to append message
   const addMessage = (sender, text, extra = {}) => {
@@ -328,19 +422,13 @@ function WhatsAppPlaceholderPage() {
         const estimate = unitPrice > 0 && qty > 0 ? unitPrice * qty : null;
         const diff = estimate && budget ? estimate - budget : null;
 
-        // Smart local Kannada translation of customer message
+        // Authentic Kannada translation of customer message
         let knTranslation = '';
+        let isAlreadyKn = false;
         if (enq.message) {
-          let kn = enq.message;
-          kn = kn.replace(/can you make (\d+) pieces/gi, '$1 ತುಂಡುಗಳನ್ನು ತಯಾರಿಸಲು ಸಾಧ್ಯವೇ');
-          kn = kn.replace(/pieces|pcs/gi, 'ತುಂಡುಗಳು');
-          kn = kn.replace(/blue lacquer finish/gi, 'ನೀಲಿ ಲ್ಯಾಕರ್ ಫಿನಿಶಿಂಗ್');
-          kn = kn.replace(/discount/gi, 'ರಿಯಾಯಿತಿ');
-          kn = kn.replace(/custom order/gi, 'ಕಸ್ಟಮ್ ಆರ್ಡರ್');
-          kn = kn.replace(/bulk order/gi, 'ಸಗಟು ಆರ್ಡರ್');
-          kn = kn.replace(/urgent delivery/gi, 'ತುರ್ತು ವಿತರಣೆ');
-          kn = kn.replace(/budget/gi, 'ಬಜೆಟ್');
-          knTranslation = kn !== enq.message ? kn : `(ಗ್ರಾಹಕರ ಸಂದೇಶ: "${enq.message}")`;
+          const res = translateCustomerMessageToKannada(enq.message);
+          knTranslation = res.translation;
+          isAlreadyKn = res.isAlreadyKannada;
         }
 
         addMessage('assistant', '', {
@@ -350,7 +438,8 @@ function WhatsAppPlaceholderPage() {
             unitPrice: unitPrice > 0 ? unitPrice : 400,
             estimate: estimate || (qty > 0 ? qty * 400 : null),
             diff,
-            knTranslation
+            knTranslation,
+            isAlreadyKn
           }
         });
       }
@@ -1770,14 +1859,67 @@ function WhatsAppPlaceholderPage() {
                       <strong style={{ color: 'var(--text)', fontSize: '0.86rem' }}>{msg.enquiryCard.product_name}</strong>
                     </div>
 
-                    <p style={{ margin: '0.2rem 0 0.4rem', fontStyle: 'italic', color: 'var(--text)', background: 'var(--card-bg, #ffffff)', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                      "{msg.enquiryCard.message}"
-                    </p>
-
-                    {msg.enquiryCard.knTranslation && (
-                      <p style={{ margin: '0.2rem 0 0.4rem', color: '#1e3a8a', background: '#eff6ff', padding: '0.45rem', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '0.78rem' }}>
-                        🌐 <strong>{isKn ? 'ಕನ್ನಡ ಅನುವಾದ:' : 'Translation:'}</strong> {msg.enquiryCard.knTranslation}
+                    {/* Customer Message Display */}
+                    <div style={{ marginBottom: '0.4rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--secondary-text)', fontWeight: 600, marginBottom: '2px' }}>
+                        {isKn ? 'ಮೂಲ ಗ್ರಾಹಕರ ಸಂದೇಶ:' : 'Original customer message:'}
+                      </div>
+                      <p style={{ margin: '0 0 0.35rem', fontStyle: 'italic', color: 'var(--text)', background: 'var(--card-bg, #ffffff)', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                        "{msg.enquiryCard.message}"
                       </p>
+                    </div>
+
+                    {msg.enquiryCard.knTranslation && !msg.enquiryCard.isAlreadyKn && (
+                      <div style={{ margin: '0.2rem 0 0.4rem', color: '#1e3a8a', background: '#eff6ff', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 700, display: 'block', marginBottom: '2px' }}>
+                            {isKn ? 'ಕನ್ನಡ ಅನುವಾದ:' : 'Kannada translation:'}
+                          </span>
+                          <span style={{ fontWeight: 600, color: '#1e3a8a' }}>
+                            {msg.enquiryCard.knTranslation}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => speakMessageText(msg.id, msg.enquiryCard.knTranslation)}
+                          style={{
+                            background: speakingMsgId === msg.id ? '#dc2626' : '#2563EB',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '0.25rem 0.5rem',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}
+                        >
+                          {speakingMsgId === msg.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಆಲಿಸಿ' : '🔊 Listen')}
+                        </button>
+                      </div>
+                    )}
+
+                    {msg.enquiryCard.isAlreadyKn && (
+                      <div style={{ margin: '0.2rem 0 0.4rem', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => speakMessageText(msg.id, msg.enquiryCard.message)}
+                          style={{
+                            background: speakingMsgId === msg.id ? '#dc2626' : '#2563EB',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '0.25rem 0.5rem',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {speakingMsgId === msg.id ? (isKn ? '⏹ ನಿಲ್ಲಿಸಿ' : '⏹ Stop') : (isKn ? '🔊 ಆಲಿಸಿ' : '🔊 Listen')}
+                        </button>
+                      </div>
                     )}
 
                     {msg.enquiryCard.reference_image_url && (

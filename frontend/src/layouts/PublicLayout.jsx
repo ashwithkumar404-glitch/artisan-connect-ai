@@ -21,7 +21,7 @@ export default function PublicLayout() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen overflow-x-hidden">
       {/* Indian Tricolor Accent Strip */}
       <div className="h-1.5 w-full flex" aria-hidden="true">
         <div className="bg-[#FF9933] flex-1"></div>
@@ -29,9 +29,9 @@ export default function PublicLayout() {
         <div className="bg-[#138808] flex-1"></div>
       </div>
 
-      {/* Top Government Disclaimer / Meta Header */}
-      <div className="bg-slate-100 border-b border-slate-200 text-xs py-1.5 px-4 text-slate-600 text-center font-medium">
-        <span>🇮🇳 An Initiative for National Artisan Development (Mockup Portal for SIH 2026)</span>
+      {/* Top Banner Header */}
+      <div className="bg-slate-100 border-b border-slate-200 text-xs py-1.5 px-4 text-slate-700 text-center font-medium">
+        <span>🇮🇳 Empowering India's Artisans through Direct Digital Linkage & AI Assistance</span>
       </div>
 
       {/* Header */}
@@ -270,15 +270,15 @@ export default function PublicLayout() {
               </ul>
             </div>
             <div>
-              <h2 className="text-white text-base font-bold tracking-wider uppercase mb-4">Official Disclaimer</h2>
+              <h2 className="text-white text-base font-bold tracking-wider uppercase mb-4">Authenticity Guarantee</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                This website is an MVP prototype developed for the Smart India Hackathon (SIH 2026) under Problem Statement SIH26090. All data, catalogs, and authentication mechanisms are mockups for evaluation purposes.
+                Artisan Connect AI establishes direct links between certified regional craftspersons and conscientious buyers, preserving cultural heritage and ensuring fair compensation.
               </p>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between">
             <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} Artisan Connect AI. Ministry of Textiles (Mock Project).
+              © {new Date().getFullYear()} Artisan Connect AI. Empowering India's Artisan Communities.
             </p>
             <p className="text-xs text-slate-400 mt-2 md:mt-0">
               Designed for Accessibility (WCAG 2.1 AA Compliant Style)

@@ -7,7 +7,7 @@ export default function About() {
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-gov-navy m-0">About Artisan Connect AI</h1>
         <p className="text-gov-saffron font-bold text-sm tracking-widest uppercase">
-          SIH 2026 Problem Statement SIH26090
+          National Digital Craft Empowerment Initiative
         </p>
       </div>
 

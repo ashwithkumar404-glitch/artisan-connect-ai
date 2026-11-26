@@ -117,3 +117,4 @@ Artisan Connect AI is an end-to-end digital enablement and direct market linkage
 1. The speech recognition engine relies on browser Web Speech API availability (best supported on Chromium-based mobile browsers like Chrome for Android).
 2. The ML training dataset currently consists of 77 verified craft samples; expanding this to 5,000+ state-wide craft items will improve regression $R^2$ scores.
 3. Live production WhatsApp delivery requires active Meta Business Cloud API billing credentials, which is simulated internally via the in-app WhatsApp assistant hub.
+

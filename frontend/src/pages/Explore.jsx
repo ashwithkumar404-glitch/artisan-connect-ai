@@ -26,6 +26,8 @@ export default function Explore() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
+  const [newArrivalIds, setNewArrivalIds] = useState(() => new Set());
+  const [newArrivalToast, setNewArrivalToast] = useState(null);
 
   const categories = [
     'All',
@@ -200,10 +202,25 @@ export default function Explore() {
           schema: 'public',
           table: 'products'
         },
-        () => {
-          if (active) {
-            fetchExploreProducts();
+        (payload) => {
+          if (!active) return;
+          if (payload.eventType === 'INSERT' && payload.new?.id) {
+            const newId = payload.new.id;
+            const newTitle = payload.new.name || 'New Handicraft Product';
+            setNewArrivalIds((prev) => new Set([...prev, newId]));
+            setNewArrivalToast({
+              id: newId,
+              title: newTitle
+            });
+            setTimeout(() => {
+              setNewArrivalIds((prev) => {
+                const next = new Set(prev);
+                next.delete(newId);
+                return next;
+              });
+            }, 8000);
           }
+          fetchExploreProducts();
         }
       )
       .subscribe();
@@ -642,9 +659,15 @@ export default function Explore() {
             const artisanName = product.artisans?.business_name || product.artisans?.profiles?.full_name || 'Unknown Artisan';
             const locationName = product.artisans?.location || 'Unknown Location';
             const isRecent = product.created_at && (Date.now() - new Date(product.created_at).getTime()) < 1000 * 60 * 60 * 24 * 7;
+            const isNewArrival = newArrivalIds.has(product.id);
             
             return (
-              <div key={product.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col hover:shadow-md transition-all duration-300 relative animate-fade-in">
+              <div
+                key={product.id}
+                className={`bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col hover:shadow-md transition-all duration-300 relative ${
+                  isNewArrival ? 'new-arrival-card ring-2 ring-amber-400 ring-offset-2' : 'animate-fade-in'
+                }`}
+              >
                 {/* Image Section */}
                 <Link to={`/product/${product.id}`} className="block h-48 bg-slate-50 relative border-b border-slate-100 overflow-hidden group">
                   {imageUrl ? (
@@ -663,11 +686,15 @@ export default function Explore() {
                       <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">No Image</span>
                     </div>
                   )}
-                  {isRecent && product.stock_quantity > 0 && (
-                    <span className="absolute top-2 left-2 bg-gradient-to-r from-gov-saffron to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full shadow-sm tracking-wide uppercase flex items-center gap-1 animate-pulse">
+                  {isNewArrival ? (
+                    <span className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full shadow-md tracking-wider uppercase flex items-center gap-1 animate-pulse z-10">
                       ✨ NEW ARRIVAL
                     </span>
-                  )}
+                  ) : isRecent && product.stock_quantity > 0 ? (
+                    <span className="absolute top-2 left-2 bg-gradient-to-r from-gov-saffron to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full shadow-sm tracking-wide uppercase flex items-center gap-1">
+                      ✨ NEW
+                    </span>
+                  ) : null}
                   {product.stock_quantity === 0 && (
                     <span className="absolute top-2 right-2 bg-red-655 text-white text-[9px] font-extrabold px-2 py-0.5 rounded">
                       Out of Stock
@@ -750,6 +777,31 @@ export default function Explore() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Real-time New Arrival Non-blocking Toast */}
+      {newArrivalToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-xl shadow-2xl border border-amber-400/60 flex items-center gap-3 max-w-sm backdrop-blur-xs transition-all duration-300"
+        >
+          <span className="text-2xl animate-bounce">✨</span>
+          <div className="text-xs">
+            <strong className="block text-amber-400 font-bold uppercase tracking-wider text-[10px]">
+              New Handmade Product Published!
+            </strong>
+            <span className="font-semibold text-slate-100 line-clamp-1">{newArrivalToast.title}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNewArrivalToast(null)}
+            className="text-slate-400 hover:text-white font-bold ml-2 text-sm p-1 cursor-pointer"
+            aria-label="Dismiss new arrival alert"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>

@@ -218,7 +218,7 @@ function MyOrdersPage() {
 
     if (!artisan?.id) return;
 
-    // Realtime subscription for incoming order updates
+    // Realtime subscription for incoming order updates and customer status changes
     const channelId = Math.random().toString(36).substring(7);
     const channel = supabase
       .channel(`artisan-orders-${artisan.id}-${channelId}`)
@@ -229,6 +229,17 @@ function MyOrdersPage() {
           schema: 'public',
           table: 'order_items',
           filter: `artisan_id=eq.${artisan.id}`
+        },
+        () => {
+          fetchArtisanOrders();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders'
         },
         () => {
           fetchArtisanOrders();
@@ -1072,6 +1083,26 @@ function MyOrdersPage() {
                         ✓ {isKn ? 'ಯಶಸ್ವಿಯಾಗಿ ತಲುಪಿಸಲಾಗಿದೆ' : 'Delivered'}
                       </span>
                     )}
+
+                    <Link
+                      to={`/whatsapp?orderId=${ord.id}&customerId=${ord.customer_id}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        fontSize: '0.72rem',
+                        color: '#2563EB',
+                        textDecoration: 'none',
+                        fontWeight: 600,
+                        padding: '0.3rem 0.6rem',
+                        border: '1px solid #93c5fd',
+                        borderRadius: '6px',
+                        background: 'rgba(37, 99, 235, 0.05)',
+                        marginTop: '0.35rem'
+                      }}
+                    >
+                      💬 {isKn ? 'ಗ್ರಾಹಕರೊಂದಿಗೆ ಚಾಟ್' : 'Message Customer'}
+                    </Link>
                   </div>
                 </div>
               </div>

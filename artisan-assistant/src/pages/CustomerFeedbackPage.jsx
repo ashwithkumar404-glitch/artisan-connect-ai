@@ -4,6 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import ThemeToggle from '../components/ThemeToggle';
 import DashboardNavTabs from '../components/DashboardNavTabs';
+import { isKannadaText } from '../lib/kannadaTranslator';
 
 function CustomerFeedbackPage() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ function CustomerFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [filterRating, setFilterRating] = useState('all'); // 'all' | '5' | '4' | 'critical'
+  const [selectedProductFilter, setSelectedProductFilter] = useState('all'); // 'all' | productId
   const [activeReplyId, setActiveReplyId] = useState(null);
   const [replyDrafts, setReplyDrafts] = useState(new Map());
   const [savedReplies, setSavedReplies] = useState(() => {
@@ -132,7 +134,16 @@ function CustomerFeedbackPage() {
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.lang = isKn ? 'kn-IN' : 'en-IN';
+    const voices = window.speechSynthesis.getVoices() || [];
+    const knVoice = voices.find(v => v.lang.startsWith('kn') || v.lang.includes('kn-IN') || v.name.toLowerCase().includes('kannada'));
+    if (knVoice) {
+      utterance.voice = knVoice;
+      utterance.lang = 'kn-IN';
+    } else if (isKannadaText(textToSpeak)) {
+      utterance.lang = 'kn-IN';
+    } else {
+      utterance.lang = isKn ? 'kn-IN' : 'en-IN';
+    }
     utterance.rate = 0.9;
     utterance.onend = () => setSpeakingId(null);
     utterance.onerror = () => setSpeakingId(null);
@@ -236,36 +247,79 @@ function CustomerFeedbackPage() {
     }
   }, [artisan, authLoading, isKn]);
 
-  // Summary Metrics
+  // Realtime subscription for incoming product reviews
+  useEffect(() => {
+    if (!artisan?.id) return;
+
+    const channel = supabase
+      .channel(`artisan_reviews_realtime_${artisan.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'product_reviews'
+        },
+        () => {
+          fetchArtisanReviews();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [artisan?.id]);
+
+  // Summary Metrics & Product Breakdown
   const metrics = useMemo(() => {
     if (reviews.length === 0) {
-      return { totalCount: 0, averageRating: 0, starCounts: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } };
+      return { totalCount: 0, averageRating: 0, starCounts: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }, productBreakdown: [] };
     }
 
     const starCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     let sum = 0;
+    const prodReviewCounts = new Map(); // prodId => { count, sum }
 
     reviews.forEach(r => {
       const rating = Math.min(Math.max(Number(r.rating) || 5, 1), 5);
       sum += rating;
       starCounts[rating] = (starCounts[rating] || 0) + 1;
+
+      if (r.product_id) {
+        const existing = prodReviewCounts.get(r.product_id) || { count: 0, sum: 0 };
+        existing.count += 1;
+        existing.sum += rating;
+        prodReviewCounts.set(r.product_id, existing);
+      }
     });
+
+    const productBreakdown = Array.from(prodReviewCounts.entries()).map(([pid, data]) => ({
+      productId: pid,
+      name: productsMap.get(pid)?.name || (isKn ? 'ಕರಕುಶಲ ಉತ್ಪನ್ನ' : 'Handicraft Item'),
+      count: data.count,
+      average: (data.sum / data.count).toFixed(1)
+    }));
 
     return {
       totalCount: reviews.length,
       averageRating: (sum / reviews.length).toFixed(1),
-      starCounts
+      starCounts,
+      productBreakdown
     };
-  }, [reviews]);
+  }, [reviews, productsMap, isKn]);
 
-  // Filtered reviews list
+  // Filtered reviews list by product and star rating
   const filteredReviews = useMemo(() => {
-    if (filterRating === 'all') return reviews;
-    if (filterRating === '5') return reviews.filter(r => Number(r.rating) === 5);
-    if (filterRating === '4') return reviews.filter(r => Number(r.rating) === 4);
-    if (filterRating === 'critical') return reviews.filter(r => Number(r.rating) <= 3);
-    return reviews;
-  }, [reviews, filterRating]);
+    let result = reviews;
+    if (selectedProductFilter !== 'all') {
+      result = result.filter(r => r.product_id === selectedProductFilter);
+    }
+    if (filterRating === '5') return result.filter(r => Number(r.rating) === 5);
+    if (filterRating === '4') return result.filter(r => Number(r.rating) === 4);
+    if (filterRating === 'critical') return result.filter(r => Number(r.rating) <= 3);
+    return result;
+  }, [reviews, selectedProductFilter, filterRating]);
 
   // Copy reply to clipboard
   const handleCopyReply = (id, text) => {
@@ -429,8 +483,94 @@ function CustomerFeedbackPage() {
               <span>{(metrics.starCounts[3] || 0) + (metrics.starCounts[2] || 0) + (metrics.starCounts[1] || 0)}</span>
             </div>
           </div>
+
+          {/* Per-Product Breakdown */}
+          {metrics.productBreakdown.length > 0 && (
+            <div style={{ width: '100%', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--secondary-text)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>
+                📦 {isKn ? 'ಉತ್ಪನ್ನವಾರು ವಿಮರ್ಶೆಗಳ ವಿವರ:' : 'Product Breakdown:'}
+              </span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                {metrics.productBreakdown.map((pb) => (
+                  <div
+                    key={pb.productId}
+                    onClick={() => setSelectedProductFilter(selectedProductFilter === pb.productId ? 'all' : pb.productId)}
+                    style={{
+                      padding: '0.4rem 0.6rem',
+                      borderRadius: '6px',
+                      background: selectedProductFilter === pb.productId ? 'rgba(7, 94, 84, 0.1)' : 'var(--bg)',
+                      border: selectedProductFilter === pb.productId ? '1px solid var(--primary-green)' : '1px solid var(--border)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+                      {pb.name}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 700 }}>
+                      ★ {pb.average} ({pb.count})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Product Filter Selector */}
+      {metrics.productBreakdown.length > 1 && (
+        <div style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <label htmlFor="prod-filter-select" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)' }}>
+            🏷️ {isKn ? 'ಉತ್ಪನ್ನ ಫಿಲ್ಟರ್:' : 'Product Filter:'}
+          </label>
+          <select
+            id="prod-filter-select"
+            value={selectedProductFilter}
+            onChange={(e) => setSelectedProductFilter(e.target.value)}
+            style={{
+              padding: '0.3rem 0.5rem',
+              borderRadius: '6px',
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--card-bg, #ffffff)',
+              color: 'var(--text)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              flex: 1,
+              maxWidth: '300px'
+            }}
+          >
+            <option value="all">
+              {isKn ? `ಎಲ್ಲಾ ಉತ್ಪನ್ನಗಳು (${reviews.length})` : `All Products (${reviews.length})`}
+            </option>
+            {metrics.productBreakdown.map((pb) => (
+              <option key={pb.productId} value={pb.productId}>
+                {pb.name} ({pb.count} • ★ {pb.average})
+              </option>
+            ))}
+          </select>
+          {selectedProductFilter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setSelectedProductFilter('all')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--primary-green)',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '0.2rem'
+              }}
+            >
+              ✕ {isKn ? 'ಮರುಹೊಂದಿಸಿ' : 'Clear'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>

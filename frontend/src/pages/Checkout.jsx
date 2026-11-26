@@ -277,13 +277,13 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Demo Order Flow Notice */}
-          <div className="bg-amber-50 border border-amber-200 rounded p-4 text-amber-900 space-y-1">
+          {/* Direct Artisan Settlement Notice */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded p-4 text-emerald-950 space-y-1">
             <h4 className="font-bold text-xs m-0 flex items-center gap-1.5">
-              <span>💡</span> Demo Checkout Mode
+              <span>🤝</span> Direct Artisan Settlement / Pay on Delivery
             </h4>
-            <p className="text-[11px] leading-relaxed m-0 text-amber-800">
-              For this MVP prototype, payment validation is bypassed. Clicking <strong>Place Order</strong> will immediately write your order to the database.
+            <p className="text-[11px] leading-relaxed m-0 text-emerald-900">
+              Your order connects directly to the verified artisan. You can settle directly upon order dispatch or via Cash on Delivery. Clicking <strong>Place Order</strong> will immediately confirm your order with the artisan.
             </p>
           </div>
         </div>

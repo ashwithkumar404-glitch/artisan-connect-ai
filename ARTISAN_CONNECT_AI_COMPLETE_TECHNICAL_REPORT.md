@@ -200,3 +200,4 @@ cd ../ml
 - **`KA-ART-1002`**: Sharadamma Nekara — Handloom & Textiles (Bagalkote, Karnataka)
 - **`KA-ART-1003`**: Mallikarjun Badagi — Wood Craft & Toy Making (Channapatna, Karnataka)
 - **`KA-ART-1004`**: Abdul Hameed Bidri — Bidriware & Metal Craft (Bidar, Karnataka)
+

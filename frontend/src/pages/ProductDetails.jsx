@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -264,23 +264,61 @@ export default function ProductDetails() {
     }
   };
 
-  useEffect(() => {
-    let active = true;
+  const loadProductDetails = useCallback(async () => {
+    if (!id) return;
+    try {
+      setLoading(true);
+      setError('');
 
-    async function loadProductDetails() {
-      try {
-        setLoading(true);
-        setError('');
+      let productRes = await supabase
+        .from('products')
+        .select(`
+          id,
+          artisan_id,
+          name,
+          local_title,
+          description,
+          local_description,
+          price,
+          stock_quantity,
+          status,
+          average_rating,
+          review_count,
+          created_at,
+          categories (
+            name
+          ),
+          product_images (
+            id,
+            image_url,
+            display_order
+          ),
+          artisans (
+            id,
+            profile_id,
+            business_name,
+            bio,
+            location,
+            specialization,
+            experience_years,
+            verification_status,
+            profiles (
+              full_name
+            )
+          )
+        `)
+        .eq('id', id)
+        .maybeSingle();
 
-        let productRes = await supabase
+      // Safe fallback if local_title or local_description column does not exist on remote DB
+      if (productRes.error && (productRes.error.message?.includes('local_title') || productRes.error.message?.includes('local_description'))) {
+        productRes = await supabase
           .from('products')
           .select(`
             id,
             artisan_id,
             name,
-            local_title,
             description,
-            local_description,
             price,
             stock_quantity,
             status,
@@ -311,127 +349,76 @@ export default function ProductDetails() {
           `)
           .eq('id', id)
           .maybeSingle();
+      }
 
-        // Safe fallback if local_title or local_description column does not exist on remote DB
-        if (productRes.error && (productRes.error.message?.includes('local_title') || productRes.error.message?.includes('local_description'))) {
-          productRes = await supabase
-            .from('products')
-            .select(`
+      // Secondary fallback if artisan columns differ
+      if (productRes.error && (productRes.error.message?.includes('bio') || productRes.error.message?.includes('specialization') || productRes.error.message?.includes('experience_years'))) {
+        productRes = await supabase
+          .from('products')
+          .select(`
+            id,
+            artisan_id,
+            name,
+            description,
+            price,
+            stock_quantity,
+            status,
+            created_at,
+            categories (
+              name
+            ),
+            product_images (
               id,
-              artisan_id,
-              name,
-              description,
-              price,
-              stock_quantity,
-              status,
-              average_rating,
-              review_count,
-              created_at,
-              categories (
-                name
-              ),
-              product_images (
-                id,
-                image_url,
-                display_order
-              ),
-              artisans (
-                id,
-                profile_id,
-                business_name,
-                bio,
-                location,
-                specialization,
-                experience_years,
-                verification_status,
-                profiles (
-                  full_name
-                )
-              )
-            `)
-            .eq('id', id)
-            .maybeSingle();
-        }
-
-        // Secondary fallback if artisan columns differ
-        if (productRes.error && (productRes.error.message?.includes('bio') || productRes.error.message?.includes('specialization') || productRes.error.message?.includes('experience_years'))) {
-          productRes = await supabase
-            .from('products')
-            .select(`
+              image_url,
+              display_order
+            ),
+            artisans (
               id,
-              artisan_id,
-              name,
-              description,
-              price,
-              stock_quantity,
-              status,
-              created_at,
-              categories (
-                name
-              ),
-              product_images (
-                id,
-                image_url,
-                display_order
-              ),
-              artisans (
-                id,
-                profile_id,
-                business_name,
-                location,
-                verification_status,
-                profiles (
-                  full_name
-                )
+              profile_id,
+              business_name,
+              location,
+              verification_status,
+              profiles (
+                full_name
               )
-            `)
-            .eq('id', id)
-            .maybeSingle();
-        }
+            )
+          `)
+          .eq('id', id)
+          .maybeSingle();
+      }
 
-        const { data, error: fetchError } = productRes;
-        if (fetchError) throw fetchError;
+      const { data, error: fetchError } = productRes;
+      if (fetchError) throw fetchError;
 
-        if (data) {
-          if (!data.local_description && data.description?.includes('---')) {
-            const embedded = parseEmbeddedKannadaListing(data.description);
-            if (!data.local_title && embedded.localTitle) {
-              data.local_title = embedded.localTitle;
-            }
-            if (!data.local_description && embedded.localDescription) {
-              data.local_description = embedded.localDescription;
-            }
+      if (data) {
+        if (!data.local_description && data.description?.includes('---')) {
+          const embedded = parseEmbeddedKannadaListing(data.description);
+          if (!data.local_title && embedded.localTitle) {
+            data.local_title = embedded.localTitle;
           }
-        }
-
-        if (active) {
-          if (!data || data.status !== 'published' || data.artisans?.verification_status !== 'approved') {
-            setProduct(null);
-          } else {
-            setProduct(data);
-            setSelectedImageIndex(0);
+          if (!data.local_description && embedded.localDescription) {
+            data.local_description = embedded.localDescription;
           }
-        }
-      } catch (err) {
-        console.error('Error fetching product details:', err);
-        if (active) {
-          setError(err.message || 'Failed to load product details.');
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
         }
       }
-    }
 
-    if (id) {
-      loadProductDetails();
+      if (!data || data.status !== 'published' || data.artisans?.verification_status !== 'approved') {
+        setProduct(null);
+      } else {
+        setProduct(data);
+        setSelectedImageIndex(0);
+      }
+    } catch (err) {
+      console.error('Error fetching product details:', err);
+      setError(err.message || 'Failed to load product details.');
+    } finally {
+      setLoading(false);
     }
-
-    return () => {
-      active = false;
-    };
   }, [id]);
+
+  useEffect(() => {
+    loadProductDetails();
+  }, [loadProductDetails]);
 
   if (loading) {
     return (
@@ -1122,6 +1109,7 @@ export default function ProductDetails() {
         <ProductReviewsSection
           productId={product.id}
           productName={product.name}
+          onReviewSubmitted={loadProductDetails}
         />
       </div>
     </div>
